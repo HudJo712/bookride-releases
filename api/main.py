@@ -614,7 +614,7 @@ async def create_partner_rental(request: Request, session: Session = Depends(get
         session.add(record)
     session.commit()
     session.refresh(record)
-    payload = PartnerRental.model_validate(record).model_dump(mode="json")
+    payload = PartnerRental.model_validate(record.model_dump()).model_dump(mode="json")
 
     pretty = parse_pretty_flag(request.query_params.get("pretty"))
     accept = negotiate_accept(request.headers.get("Accept"))
@@ -626,7 +626,7 @@ async def get_partner_rental(rental_id: int, request: Request, session: Session 
     record = session.get(PartnerRentalRecord, rental_id)
     if not record:
         raise HTTPException(status_code=404, detail="Rental not found")
-    rental = PartnerRental.model_validate(record).model_dump(mode="json")
+    rental = PartnerRental.model_validate(record.model_dump()).model_dump(mode="json")
     pretty = parse_pretty_flag(request.query_params.get("pretty"))
     accept = negotiate_accept(request.headers.get("Accept"))
     return render(rental, accept, "rental", pretty)
