@@ -1,0 +1,26 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://example.com/book.schema.json",
+ "$defs": {
+  "book": {
+   "type": "object",
+   "required": ["id", "title", "author", "price", "in_stock"],
+   "properties": {
+    "id": {"type": "integer", "minimum": 1},
+    "title": {"type": "string", "minLength": 1},
+    "author": {"type": "string", "minLength": 1},
+    "price": {"type": "number", "minimum": 0},
+    "in_stock": {"type": "boolean"}
+   },
+   "additionalProperties": false
+  }
+ },
+ "anyOf": [
+  {"$ref": "#/$defs/book"},
+  {
+   "type": "array",
+   "items": {"$ref": "#/$defs/book"},
+   "minItems": 1
+  }
+ ]
+}

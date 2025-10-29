@@ -1,0 +1,11 @@
+syntax = "proto3";
+package bookandride;
+
+message PartnerRental {
+  int32 id = 1;
+  int32 user_id = 2;
+  string bike_id = 3;
+  string start_time = 4;
+  string end_time = 5;
+  double price_eur = 6;
+}
