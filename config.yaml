@@ -1,0 +1,12 @@
+dev:
+ DB_URL: "postgresql://dev_user:dev_pass@localhost:5432/dev_db"
+ API_KEY: "dev-12345"
+ DEBUG: true
+staging:
+ DB_URL: "postgresql://staging_user:staging_pass@stagingdb:5432/staging_db"
+ API_KEY: "staging-67890"
+ DEBUG: true
+prod:
+ DB_URL: "postgresql://prod_user:prod_pass@prod-db:5432/prod_db"
+ API_KEY: "prod-abcdef"
+ DEBUG: false
