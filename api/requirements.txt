@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlmodel
+psycopg2-binary
+prometheus-client
+xmltodict
+jsonschema
+pydantic
+pyyaml
+protobuf

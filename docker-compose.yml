@@ -60,3 +60,57 @@ services:
       - ELASTIC_USERNAME=${ELASTIC_USERNAME}
     ports:
       - "${ELASTICSEARCH_PORT:-9200}:9200"
+  api:
+    build:
+      context: ./api
+    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    env_file:
+      - .env.example
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - gateway-net
+    volumes:
+      - ./api:/app
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - .env.example
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev123}
+      POSTGRES_DB: ${POSTGRES_DB:-bookandride}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-bookandride}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gateway-net
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - api
+    networks:
+      - gateway-net
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  dbdata:
+
+networks:
+  gateway-net:
+    driver: bridge
