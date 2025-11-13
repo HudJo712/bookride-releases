@@ -796,3 +796,4 @@ async def convert(request: Request, to: str, pretty: bool = Query(True)) -> Resp
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "version": app.version}
+raise Exception('Boom in prod')
