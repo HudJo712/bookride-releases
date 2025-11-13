@@ -1,30 +1,186 @@
 services:
-  api_blue:
-    build: ./api
-    container_name: api_blue
+  elasticsetup:
+    image: curlimages/curl:8.11.1
+    container_name: elastic-setup
+    depends_on:
+      - elasticsearch
     environment:
-      - APP_ENV=staging
-    networks: [gateway-net]
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD}
+    command: >
+      sh -c '
+        set -e
+        echo "Waiting for Elasticsearch..."
+        until curl -s -u "$${ELASTIC_USERNAME}:$${ELASTIC_PASSWORD}" http://elasticsearch:9200/_cluster/health >/dev/null; do
+          echo "Elasticsearch not ready yet, retrying in 5s"
+          sleep 5
+        done
+        echo "Setting kibana_system password..."
+        while true; do
+          STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -u "$${ELASTIC_USERNAME}:$${ELASTIC_PASSWORD}" \
+            -X POST -H "Content-Type: application/json" \
+            -d "{\"password\":\"$${KIBANA_SYSTEM_PASSWORD}\"}" \
+            http://elasticsearch:9200/_security/user/kibana_system/_password)
+          if [ "$$STATUS" = "200" ] || [ "$$STATUS" = "204" ]; then
+            echo "kibana_system password set."
+            break
+          fi
+          echo "Password API returned $$STATUS, retrying in 5s..."
+          sleep 5
+        done
+      '
+    restart: "no"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION}
+    container_name: kibana
+    ports:
+      - "${KIBANA_PORT:-5601}:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=${ELASTICSEARCH_HOSTS}
+      - ELASTICSEARCH_USERNAME=${KIBANA_SYSTEM_USERNAME}
+      - ELASTICSEARCH_PASSWORD=${KIBANA_SYSTEM_PASSWORD}
+      - ELASTICSEARCH_SSL_VERIFICATIONMODE=${ELASTICSEARCH_SSL_VERIFICATIONMODE}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - elasticsetup
+      - elasticsearch
+
+  kibana_setup:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      kibana:
+        condition: service_started
+    env_file:
+      - .env
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      set -eu
+
+      echo "Waiting for Kibana API..."
+      until [ "$(curl -s -o /dev/null -w '%{http_code}' http://kibana:5601/api/status)" = "200" ]; do
+        sleep 3
+      done
+
+      echo "Creating data view logs-demo* (idempotent)..."
+      curl -s -u "$${ELASTIC_USERNAME}:$${ELASTIC_PASSWORD}" \
+        -X POST http://kibana:5601/api/data_views/data_view \
+        -H 'kbn-xsrf: bootstrap' -H 'Content-Type: application/json' \
+        -d '{"data_view":{"title":"logs-demo*","timeFieldName":"@timestamp","name":"logs-demo"}}' \
+        || true
+
+      echo "Importing saved objects..."
+      curl -s -u "$${ELASTIC_USERNAME}:$${ELASTIC_PASSWORD}" \
+        -X POST "http://kibana:5601/api/saved_objects/_import?overwrite=true" \
+        -H "kbn-xsrf: bootstrap" \
+        -F file=@/kibana/saved_objects.ndjson \
+        || true
+
+      echo "Bootstrap complete."
+    volumes:
+      - ./kibana:/kibana:ro
+    restart: "no"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION}
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.transport.ssl.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - ELASTIC_USERNAME=${ELASTIC_USERNAME}
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  api_blue:
+    build:
+      context: ./api
+    container_name: api_blue
+    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    env_file:
+      - .env.example
+      - .env
+    environment:
+      - APP_ENV=staging   # or dev/prod; just needs to differ
+    depends_on:
+      db:
+        condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
+    networks:
+      - gateway-net
+    volumes:
+      - ./api:/app
+    restart: unless-stopped
 
   api_green:
-    build: ./api
+    build:
+      context: ./api
     container_name: api_green
+    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    env_file:
+      - .env.example
+      - .env
     environment:
-      - APP_ENV=prod
-    networks: [gateway-net]
+      - APP_ENV=prod      # different env to prove config switch
+    depends_on:
+      db:
+        condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
+    networks:
+      - gateway-net
+    volumes:
+      - ./api:/app
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - .env.example
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev123}
+      POSTGRES_DB: ${POSTGRES_DB:-bookandride}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-bookandride}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gateway-net
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    restart: unless-stopped
 
   nginx:
     image: nginx:alpine
     container_name: nginx
+    depends_on:
+      - api_blue
+      - api_green
+    networks:
+      - gateway-net
     ports:
       - "8080:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/active-upstream.conf:/etc/nginx/conf.d/active-upstream.conf:ro
-    depends_on:
-      - api_blue
-      - api_green
-    networks: [gateway-net]
+    restart: unless-stopped
+
+volumes:
+  dbdata:
 
 networks:
   gateway-net:

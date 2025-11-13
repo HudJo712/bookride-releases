@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, Optional
@@ -20,6 +22,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from book_pb2 import Book as PbBook
 from rental_pb2 import PartnerRental as PbPartnerRental
 from models import BookRecord, PartnerRentalRecord, RentalRecord
+from logging_utils import configure_logging, log_user_action
 
 
 app = FastAPI(title="Book & Ride API", version="1.0.0")
@@ -45,6 +48,8 @@ if DATABASE_URL.startswith("sqlite"):
     CONNECT_ARGS["check_same_thread"] = False
 
 engine = create_engine(DATABASE_URL, echo=False, connect_args=CONNECT_ARGS, pool_pre_ping=True)
+configure_logging()
+LOGGER = logging.getLogger("bookride.api")
 
 
 def get_session() -> Iterator[Session]:
@@ -114,6 +119,38 @@ API_KEYS: Dict[str, str] = {
 
 
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests served")
+
+
+@app.middleware("http")
+async def observability_logging(request: Request, call_next):
+    start_time = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        LOGGER.error(
+            "request failed",
+            extra={
+                "path": request.url.path,
+                "method": request.method,
+                "status_code": 500,
+                "response_time_ms": duration_ms,
+            },
+            exc_info=True,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+    log_fn = LOGGER.error if response.status_code >= 500 else LOGGER.info
+    log_fn(
+        "request completed",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": response.status_code,
+            "response_time_ms": duration_ms,
+        },
+    )
+    return response
 
 
 @app.middleware("http")
@@ -649,6 +686,14 @@ def start_rental(
     session.commit()
     session.refresh(record)
 
+    log_user_action(
+        LOGGER,
+        action="rental_start",
+        user_id=user,
+        bike_id=payload.bike_id,
+        rental_id=record.id,
+    )
+
     return RentalStartResponse(rental_id=record.id, started_at=record.started_at)
 
 
@@ -676,6 +721,15 @@ def stop_rental(
     record.price_eur = price
     session.add(record)
     session.commit()
+
+    log_user_action(
+        LOGGER,
+        action="rental_stop",
+        user_id=user,
+        rental_id=record.id,
+        duration_min=duration_minutes,
+        price_eur=price,
+    )
 
     return RentalStopResponse(duration_min=duration_minutes, price_eur=price)
 

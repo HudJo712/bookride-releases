@@ -8,3 +8,4 @@ jsonschema
 pydantic
 pyyaml
 protobuf
+requests
