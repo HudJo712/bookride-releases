@@ -103,9 +103,10 @@ services:
 
   api_blue:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
     container_name: api_blue
-    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
       - .env.example
       - .env
@@ -124,9 +125,10 @@ services:
 
   api_green:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
     container_name: api_green
-    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
       - .env.example
       - .env

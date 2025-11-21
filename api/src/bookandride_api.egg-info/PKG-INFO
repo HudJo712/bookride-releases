@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: bookandride-api
+Version: 0.1.0
+Summary: Book & Ride API service built with FastAPI and SQLModel.
+Author: Book & Ride Team
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: sqlmodel
+Requires-Dist: psycopg2-binary
+Requires-Dist: prometheus-client
+Requires-Dist: xmltodict
+Requires-Dist: jsonschema
+Requires-Dist: pydantic
+Requires-Dist: pyyaml
+Requires-Dist: protobuf
+Requires-Dist: requests
+Requires-Dist: httpx
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+
+v1.0.0 - Basic app setup
+v1.1.0 - Add logging and monitoring
+v2.0.0 - Refactor with new API (breaking change)v1.2.0 - new pricing rules

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
-from api.main import STORE, app
-from api.rental_pb2 import PartnerRental as PbPartnerRental
+from bookandride_api.rental_pb2 import PartnerRental as PbPartnerRental
 
 
-def test_create_rental_accepts_protobuf() -> None:
-    client = TestClient(app)
-    STORE["rentals"].clear()
-
+def test_create_rental_accepts_protobuf(client: TestClient) -> None:
     message = PbPartnerRental(
         id=1,
         user_id=42,
@@ -17,11 +15,10 @@ def test_create_rental_accepts_protobuf() -> None:
         start_time="2024-04-01T12:00:00Z",
         price_eur=3.5,
     )
-    payload = message.SerializeToString()
 
     response = client.post(
         "/rentals",
-        data=payload,
+        content=message.SerializeToString(),
         headers={
             "Content-Type": "application/x-protobuf",
             "Accept": "application/x-protobuf",
@@ -40,10 +37,8 @@ def test_create_rental_accepts_protobuf() -> None:
     assert roundtrip.price_eur == 3.5
 
 
-def test_get_rental_respects_protobuf_accept() -> None:
-    client = TestClient(app)
-    STORE["rentals"].clear()
-    STORE["rentals"][5] = {
+def test_get_rental_respects_protobuf_accept(client: TestClient) -> None:
+    payload = {
         "id": 5,
         "user_id": 99,
         "bike_id": "bike-15",
@@ -51,6 +46,8 @@ def test_get_rental_respects_protobuf_accept() -> None:
         "end_time": None,
         "price_eur": 7.0,
     }
+    create_response = client.post("/rentals", json=payload)
+    assert create_response.status_code == 200
 
     response = client.get(
         "/rentals/5",
@@ -64,6 +61,8 @@ def test_get_rental_respects_protobuf_accept() -> None:
     assert rental_pb.id == 5
     assert rental_pb.user_id == 99
     assert rental_pb.bike_id == "bike-15"
-    assert rental_pb.start_time == "2024-05-02T08:30:00Z"
+    parsed_start = datetime.fromisoformat(rental_pb.start_time.replace("Z", "+00:00"))
+    expected_start = datetime(2024, 5, 2, 8, 30, 0, tzinfo=timezone.utc)
+    assert parsed_start == expected_start
     assert rental_pb.end_time == ""
     assert rental_pb.price_eur == 7.0

@@ -4,28 +4,38 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, Optional
-
+from typing import Any, Callable, Dict, Optional
 import xmltodict
 import yaml
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
 from jsonschema import ValidationError, validate
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
-from pydantic import BaseModel, Field, field_validator
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session
 
-from book_pb2 import Book as PbBook
-from rental_pb2 import PartnerRental as PbPartnerRental
-from models import BookRecord, PartnerRentalRecord, RentalRecord
-from logging_utils import configure_logging, log_user_action
+from .auth import verify_api_key
+from .book_pb2 import Book as PbBook
+from .config_loader import load_config
+from .database import engine, get_session, init_db
+from .logging_utils import configure_logging, log_user_action
+from .logging_config import logger as basic_logger
+from .models import BookRecord, PartnerRentalRecord, RentalRecord
+from .rental_pb2 import PartnerRental as PbPartnerRental
+from .schemas import Book, PartnerRental, RentalStartRequest, RentalStartResponse, RentalStopRequest, RentalStopResponse
 
 
-app = FastAPI(title="Book & Ride API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Book & Ride API", version="1.0.0", lifespan=lifespan)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -42,80 +52,20 @@ SUPPORTED_MEDIA_TYPES: Dict[str, str] = {
     "application/x-protobuf": "proto",
 }
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bookandride.db")
-CONNECT_ARGS: dict[str, Any] = {}
-if DATABASE_URL.startswith("sqlite"):
-    CONNECT_ARGS["check_same_thread"] = False
-
-engine = create_engine(DATABASE_URL, echo=False, connect_args=CONNECT_ARGS, pool_pre_ping=True)
 configure_logging()
 LOGGER = logging.getLogger("bookride.api")
+CONFIG = load_config()
+CURRENT_ENV = os.getenv("APP_ENV", "dev")
 
 
-def get_session() -> Iterator[Session]:
-    with Session(engine) as session:
-        yield session
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    SQLModel.metadata.create_all(engine)
-
-
-class Book(BaseModel):
-    id: int = Field(gt=0)
-    title: str
-    author: str
-    price: float = Field(ge=0)
-    in_stock: bool
-
-
-class PartnerRental(BaseModel):
-    id: int = Field(gt=0)
-    user_id: int = Field(gt=0)
-    bike_id: str
-    start_time: datetime
-    end_time: Optional[datetime] = None
-    price_eur: float = Field(ge=0)
-
-    @field_validator("start_time", "end_time", mode="before")
-    @classmethod
-    def ensure_iso8601(cls, value: Any):
-        if value is None:
-            return value
-        if isinstance(value, datetime):
-            return value.astimezone(timezone.utc)
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ValueError("Timestamp must be ISO-8601 with UTC 'Z' suffix") from exc
-            return parsed.astimezone(timezone.utc)
-        raise ValueError("Timestamp must be ISO-8601 with UTC 'Z' suffix")
-
-
-class RentalStartRequest(BaseModel):
-    bike_id: str = Field(min_length=1)
-
-
-class RentalStartResponse(BaseModel):
-    rental_id: int
-    started_at: datetime
-
-
-class RentalStopRequest(BaseModel):
-    rental_id: int = Field(gt=0)
-
-
-class RentalStopResponse(BaseModel):
-    duration_min: int
-    price_eur: float
-
-
-API_KEYS: Dict[str, str] = {
-    "dev-key-123": "user1",
-    "admin-key-456": "admin",
-}
+@app.get("/info", tags=["system"])
+def info():
+    return {
+        "environment": CURRENT_ENV,
+        "db": CONFIG["DB_URL"],
+        "service_url": CONFIG["SERVICE_URL"],
+        "debug": CONFIG["DEBUG"],
+    }
 
 
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests served")
@@ -164,13 +114,6 @@ async def count_requests(request: Request, call_next):
 @app.get("/metrics")
 def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
-    user = API_KEYS.get(x_api_key)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-    return user
 
 
 def coerce_book_payload(payload: dict[str, Any]) -> None:
@@ -670,6 +613,7 @@ async def get_partner_rental(rental_id: int, request: Request, session: Session 
 
 
 def calculate_price(minutes: int) -> float:
+    basic_logger.info("Calculating price for %d minutes", minutes)
     base = minutes * 0.25
     return min(base, 12.0)
 
@@ -680,6 +624,7 @@ def start_rental(
     user: str = Depends(verify_api_key),
     session: Session = Depends(get_session),
 ) -> RentalStartResponse:
+    basic_logger.info("User %s started rental on %s", user, payload.bike_id)
     started_at = datetime.now(tz=timezone.utc)
     record = RentalRecord(user=user, bike_id=payload.bike_id, started_at=started_at)
     session.add(record)
@@ -722,6 +667,15 @@ def stop_rental(
     session.add(record)
     session.commit()
 
+    basic_logger.info(
+        "Stopping rental",
+        extra={
+            "user": user,
+            "rental_id": record.id,
+            "duration_min": duration_minutes,
+            "price_eur": price,
+        },
+    )
     log_user_action(
         LOGGER,
         action="rental_stop",
