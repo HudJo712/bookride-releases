@@ -1,17 +1,40 @@
 # Book & Ride API
 
-## Setup (≤5 steps)
+## Setup (≤6 steps)
 1. `cp .env.example .env`
-2. `docker compose up -d`
-3. `docker compose ps` and wait until all containers are `healthy`
-4. `curl http://localhost:8000/health` → `{"status":"ok","version":"1.0.0"}`
-5. Optional: `docker compose logs -f api` to watch requests
+2. Fill in `DATABASE_URL`, `API_KEY_PEPPER`, `JWT_HS256_SECRET`, and optional `OIDC_*` values.
+3. `pip install -r api/requirements.txt` (or rebuild your API container)
+4. `docker compose up -d`
+5. `docker compose ps` and wait until all containers are `healthy`
+6. `curl http://localhost:8000/health` → `{"status":"ok","version":"1.0.0"}` (optional: `docker compose logs -f api`)
 
 ## 2-Minute Demo Script
 1. Create a book in JSON, retrieve it as YAML, then repeat creation in XML to show content negotiation.
 2. POST a partner rental payload and fetch it back as protobuf to demonstrate binary support.
 3. Start and stop a rental with the API key to highlight authentication and pricing.
 4. Open `http://localhost:9090` to display Prometheus scraping the `/metrics` endpoint.
+
+## Authentication Quickstart
+```bash
+# Seed an API key (run inside repo; DB connection comes from env)
+python scripts/seed_api_keys.py --name partner-a --key supersecret123
+
+# Seed a JWT user with scopes
+python scripts/seed_users.py --username admin --password changeme --scopes "books:write rentals:write"
+
+# Fetch a JWT access token
+ACCESS_TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d 'username=admin&password=changeme&scope=books:write rentals:write' | jq -r .access_token)
+
+# Partners can use their own IdP tokens if OIDC_* vars are configured.
+```
+
+### OAuth / OIDC
+1. Set `OIDC_ISS`, `OIDC_AUD`, and `OIDC_JWKS_URL` in `.env`.
+2. Restart the API container so JWKS metadata is loaded.
+3. Have partners request tokens from that issuer that include `partner.rentals`.
+4. Call partner endpoints with `Authorization: Bearer <oidc_token>`.
 
 ## API Collection (curl)
 ```bash
@@ -21,26 +44,31 @@ curl http://localhost:8000/health
 # Create book (JSON)
 curl -X POST http://localhost:8000/books \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"id":1,"title":"1984","author":"George Orwell","price":8.99,"in_stock":true}'
 
 # Get book (YAML response)
 curl http://localhost:8000/books/1 \
-  -H "Accept: application/x-yaml"
+  -H "Accept: application/x-yaml" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
 
 # Create book (XML)
 curl -X POST http://localhost:8000/books \
   -H "Content-Type: application/xml" \
   -H "Accept: application/xml" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '<book><id>2</id><title>Dune</title><author>Frank Herbert</author><price>14.5</price><in_stock>true</in_stock></book>'
 
 # Partner rental ingest (JSON)
 curl -X POST http://localhost:8000/rentals \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $PARTNER_TOKEN" \
   -d '{"id":201,"user_id":5,"bike_id":"B-42","start_time":"2024-06-01T12:00:00Z","price_eur":9.5}'
 
 # Retrieve partner rental (protobuf)
 curl http://localhost:8000/rentals/201 \
   -H "Accept: application/x-protobuf" \
+  -H "Authorization: Bearer $PARTNER_TOKEN" \
   --output rental-201.pb
 
 # Convert payload to XML
@@ -48,25 +76,33 @@ curl -X POST "http://localhost:8000/convert?to=xml" \
   -H "Content-Type: application/json" \
   -d '{"sample": "value"}'
 
-# Start rental (API key)
+# Start rental (JWT)
 curl -X POST http://localhost:8000/rentals/start \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: dev-key-123" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"bike_id":"BIKE-01"}'
 
-# Stop rental (API key)
+# Start rental (API key alternative)
+curl -X POST http://localhost:8000/rentals/start \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: supersecret123" \
+  -d '{"bike_id":"BIKE-02"}'
+
+# Stop rental (JWT)
 curl -X POST http://localhost:8000/rentals/stop \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: dev-key-123" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"rental_id":1}'
+
+# Stop rental (API key alternative)
+curl -X POST http://localhost:8000/rentals/stop \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: supersecret123" \
+  -d '{"rental_id":2}'
 
 # Metrics snapshot
 curl http://localhost:8000/metrics | head -n 20
 ```
-
-## Architecture Snapshot
-- [Architecture Brief](Architecture-Brief.md) — rationale for the monolith and deployment slice.
-- ADRs: [`ADR-001`](adr/ADR-001-architecture.md), [`ADR-002`](adr/ADR-002-DatabaseSchema.md), [`ADR-003`](adr/ADR-003-Authentication.md)
 
 ## Extended Test Scenarios
 ### Books: Content Types & Validation
@@ -331,8 +367,6 @@ curl -X POST http://localhost:8000/books \
         <b:in_stock>true</b:in_stock>
 </b:book>
 
-# Pretty toggle
-
 # Security
 curl -X POST http://localhost:8000/books \
   -H 'Content-Type: application/xml' \
@@ -346,3 +380,96 @@ curl -X POST http://localhost:8000/books \
 }
 
 curl -X POST http://localhost:8000/books \
+
+### unit 07
+
+# Register
+curl -i -X POST http://localhost:8000/register   -H "Content-Type: application/json"   -d '{"email":"alice@example.com","password":"Secret123"}'
+
+HTTP/1.1 201 Created
+Server: nginx/1.29.2
+Date: Tue, 25 Nov 2025 14:19:33 GMT
+Content-Type: application/json
+Content-Length: 336
+Connection: keep-alive
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwic2NvcGUiOiIiLCJpYXQiOjE3NjQwODAzNzMsImV4cCI6MTc2NDEzNDM3MywiZW1haWwiOiJhbGljZUBleGFtcGxlLmNvbSIsInJvbGUiOiJ1c2VyIiwiaXNzIjoiaHR0cHM6Ly9ib29rYW5kcmlkZS5sb2NhbCIsImF1ZCI6ImJvb2thbmRyaWRlLWNsaWVudHMifQ.nzn5NgYyigSj--_7P0pXvojTxyQ_HNx_CKww8KJYI_w","token_type":"bearer"}
+# Login → get token
+TOKEN=$(curl -s -X POST http://localhost:8000/login \
+ -H "Content-Type: application/json" \
+ -d '{"email":"alice@example.com","password":"Secret123"}' | jq -r .access_token)
+
+~$ echo "Token: ${TOKEN:0:32}..."
+
+Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
+
+# Try /books WITHOUT token → 401
+curl -i http://localhost:8000/books
+HTTP/1.1 401 Unauthorized
+Server: nginx/1.29.2
+Date: Tue, 25 Nov 2025 14:26:50 GMT
+Content-Type: application/json
+Content-Length: 30
+Connection: keep-alive
+www-authenticate: Bearer
+
+{"detail":"Not authenticated"}
+
+# Try /books WITH token → 200
+create a book for now
+curl -s -X POST http://localhost:8000/books \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"title":"Demo","author":"Me","price":9.99,"in_stock":true}'
+
+curl -s http://localhost:8000/books -H "Authorization: Bearer $TOKEN" | jq
+
+{
+  "author": "Me",
+  "price": 9.99,
+  "in_stock": true,
+  "id": 1,
+  "title": "Demo"
+}[
+  {
+    "author": "Me",
+    "price": 9.99,
+    "in_stock": true,
+    "id": 1,
+    "title": "Demo"
+  }
+]
+
+# pytest
+docker compose exec api pytest -q
+
+.........                                                                                                        [100%]
+=================================================== warnings summary ===================================================
+../usr/local/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /usr/local/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+main.py:63
+  /app/main.py:63: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+../usr/local/lib/python3.11/site-packages/fastapi/applications.py:4575
+  /usr/local/lib/python3.11/site-packages/fastapi/applications.py:4575: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tests/test_books_api.py::test_create_book_rejects_unsupported_content_type
+tests/test_rentals_api.py::test_create_rental_accepts_protobuf
+  /usr/local/lib/python3.11/site-packages/httpx/_models.py:408: DeprecationWarning: Use 'content=<...>' to upload raw bytes/text content.
+    headers, stream = encode_request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+9 passed, 5 warnings in 2.01s
