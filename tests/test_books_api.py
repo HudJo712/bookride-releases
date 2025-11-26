@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+<<<<<<< HEAD:api/tests/test_books_api.py
 <<<<<<< HEAD
 =======
 import sys
@@ -71,13 +72,16 @@ def setup_database():
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
+=======
+from fastapi.testclient import TestClient
+>>>>>>> origin/green:tests/test_books_api.py
 
 
 <<<<<<< HEAD
 def test_create_book_rejects_unsupported_content_type(client: TestClient):
     response = client.post(
         "/books",
-        data="id=1",
+        content="id=1",
         headers={"Content-Type": "text/plain"},
 =======
 @pytest.fixture

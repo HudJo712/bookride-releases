@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bookandride-api"
+version = "0.1.0"
+description = "Book & Ride API service built with FastAPI and SQLModel."
+readme = "RELEASE_NOTES.md"
+requires-python = ">=3.10"
+authors = [{ name = "Book & Ride Team" }]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlmodel",
+    "psycopg2-binary",
+    "prometheus-client",
+    "xmltodict",
+    "jsonschema",
+    "pydantic",
+    "pyyaml",
+    "protobuf",
+    "requests",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.package-dir]
+"" = "api/src"
+
+[tool.setuptools.packages.find]
+where = ["api/src"]
+include = ["bookandride_api*", "myproject*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"bookandride_api" = ["schemas/*.json", "schemas/*.proto", "config.yaml"]
+
+[tool.pytest.ini_options]
+pythonpath = ["api/src"]
+testpaths = ["tests"]

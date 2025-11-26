@@ -9,13 +9,14 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
+COPY pyproject.toml RELEASE_NOTES.md ./
+COPY api ./api
+
+ENV PYTHONPATH="/app/api/src:${PYTHONPATH}"
 
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
-
-COPY . .
+    && pip install --no-cache-dir .
 
 EXPOSE 8080
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "bookandride_api.main:app", "--host", "0.0.0.0", "--port", "8080"]

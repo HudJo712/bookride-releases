@@ -1,10 +1,14 @@
 import os
+from pathlib import Path
+
 import yaml
+
+CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 
 
 def load_config():
     env = os.getenv("APP_ENV", "dev").lower()
-    with open("config.yaml", "r", encoding="utf-8") as f:
+    with CONFIG_PATH.open("r", encoding="utf-8") as f:
         configs = yaml.safe_load(f)
     if env not in configs:
         raise ValueError(f"Invalid APP_ENV: {env}")

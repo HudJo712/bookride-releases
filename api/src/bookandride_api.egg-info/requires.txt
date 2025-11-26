@@ -8,6 +8,7 @@ jsonschema
 pydantic
 pyyaml
 protobuf
+<<<<<<< HEAD:api/requirements.txt
 <<<<<<< HEAD
 =======
 bcrypt==4.2.0
@@ -21,3 +22,10 @@ email-validator
 pytest
 httpx
 >>>>>>> temp-repo-b-branch
+=======
+requests
+httpx
+
+[dev]
+pytest
+>>>>>>> origin/green:api/src/bookandride_api.egg-info/requires.txt

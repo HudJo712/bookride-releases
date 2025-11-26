@@ -49,6 +49,41 @@ services:
       - elasticsetup
       - elasticsearch
 
+  kibana_setup:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      kibana:
+        condition: service_started
+    env_file:
+      - .env
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      set -eu
+
+      echo "Waiting for Kibana API..."
+      until [ "$(curl -s -o /dev/null -w '%{http_code}' http://kibana:5601/api/status)" = "200" ]; do
+        sleep 3
+      done
+
+      echo "Creating data view logs-demo* (idempotent)..."
+      curl -s -u "$${ELASTIC_USERNAME}:$${ELASTIC_PASSWORD}" \
+        -X POST http://kibana:5601/api/data_views/data_view \
+        -H 'kbn-xsrf: bootstrap' -H 'Content-Type: application/json' \
+        -d '{"data_view":{"title":"logs-demo*","timeFieldName":"@timestamp","name":"logs-demo"}}' \
+        || true
+
+      echo "Importing saved objects..."
+      curl -s -u "$${ELASTIC_USERNAME}:$${ELASTIC_PASSWORD}" \
+        -X POST "http://kibana:5601/api/saved_objects/_import?overwrite=true" \
+        -H "kbn-xsrf: bootstrap" \
+        -F file=@/kibana/saved_objects.ndjson \
+        || true
+
+      echo "Bootstrap complete."
+    volumes:
+      - ./kibana:/kibana:ro
+    restart: "no"
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION}
     container_name: elasticsearch
@@ -61,17 +96,56 @@ services:
       - ELASTIC_USERNAME=${ELASTIC_USERNAME}
     ports:
       - "${ELASTICSEARCH_PORT:-9200}:9200"
+<<<<<<< HEAD
 =======
 >>>>>>> temp-repo-b-branch
   api:
+=======
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  api_blue:
+>>>>>>> origin/green
     build:
-      context: ./api
-    command: uvicorn main:app --host 0.0.0.0 --port 8080
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: api_blue
+    command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
       - .env.example
+      - .env
+    environment:
+      - APP_ENV=staging   # or dev/prod; just needs to differ
     depends_on:
       db:
         condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
+    networks:
+      - gateway-net
+    volumes:
+      - ./api:/app
+    restart: unless-stopped
+
+  api_green:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: api_green
+    command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
+    env_file:
+      - .env.example
+      - .env
+    environment:
+      - APP_ENV=prod      # different env to prove config switch
+    depends_on:
+      db:
+        condition: service_healthy
+      elasticsetup:
+        condition: service_completed_successfully
     networks:
       - gateway-net
     volumes:
@@ -101,14 +175,17 @@ services:
 
   nginx:
     image: nginx:alpine
+    container_name: nginx
     depends_on:
-      - api
+      - api_blue
+      - api_green
     networks:
       - gateway-net
     ports:
-      - "8000:80"
+      - "8080:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/active-upstream.conf:/etc/nginx/conf.d/active-upstream.conf:ro
     restart: unless-stopped
 
 <<<<<<< HEAD

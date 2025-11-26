@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import json
+<<<<<<< HEAD:api/main.py
 <<<<<<< HEAD
+=======
+import logging
+>>>>>>> origin/green:api/src/bookandride_api/main.py
 import os
+import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, Optional
-
+from typing import Any, Callable, Dict, Optional
 import xmltodict
 import yaml
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 =======
 from datetime import datetime, timezone
@@ -24,6 +29,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
 from jsonschema import ValidationError, validate
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
+<<<<<<< HEAD:api/main.py
 from pydantic import BaseModel, Field, field_validator
 <<<<<<< HEAD
 from sqlmodel import Session, SQLModel, create_engine
@@ -61,9 +67,28 @@ except ImportError:  # Fallback when running as a top-level module
     from models import BookRecord, PartnerRentalRecord, RentalRecord, User, get_session, init_db
     from schemas import LoginIn, MeOut, RegisterIn, TokenOut
 >>>>>>> temp-repo-b-branch
+=======
+from sqlmodel import Session
+
+from .auth import verify_api_key
+from .book_pb2 import Book as PbBook
+from .config_loader import load_config
+from .database import engine, get_session, init_db
+from .logging_utils import configure_logging, log_user_action
+from .logging_config import logger as basic_logger
+from .models import BookRecord, PartnerRentalRecord, RentalRecord
+from .rental_pb2 import PartnerRental as PbPartnerRental
+from .schemas import Book, PartnerRental, RentalStartRequest, RentalStartResponse, RentalStopRequest, RentalStopResponse
+>>>>>>> origin/green:api/src/bookandride_api/main.py
 
 
-app = FastAPI(title="Book & Ride API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Book & Ride API", version="1.0.0", lifespan=lifespan)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -80,6 +105,7 @@ SUPPORTED_MEDIA_TYPES: Dict[str, str] = {
     "application/x-protobuf": "proto",
 }
 
+<<<<<<< HEAD:api/main.py
 <<<<<<< HEAD
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bookandride.db")
 CONNECT_ARGS: dict[str, Any] = {}
@@ -159,11 +185,59 @@ API_KEYS: Dict[str, str] = {
     "dev-key-123": "user1",
     "admin-key-456": "admin",
 }
+=======
+configure_logging()
+LOGGER = logging.getLogger("bookride.api")
+CONFIG = load_config()
+CURRENT_ENV = os.getenv("APP_ENV", "dev")
+
+
+@app.get("/info", tags=["system"])
+def info():
+    return {
+        "environment": CURRENT_ENV,
+        "db": CONFIG["DB_URL"],
+        "service_url": CONFIG["SERVICE_URL"],
+        "debug": CONFIG["DEBUG"],
+    }
+>>>>>>> origin/green:api/src/bookandride_api/main.py
 
 
 =======
 >>>>>>> temp-repo-b-branch
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests served")
+
+
+@app.middleware("http")
+async def observability_logging(request: Request, call_next):
+    start_time = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        LOGGER.error(
+            "request failed",
+            extra={
+                "path": request.url.path,
+                "method": request.method,
+                "status_code": 500,
+                "response_time_ms": duration_ms,
+            },
+            exc_info=True,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+    log_fn = LOGGER.error if response.status_code >= 500 else LOGGER.info
+    log_fn(
+        "request completed",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": response.status_code,
+            "response_time_ms": duration_ms,
+        },
+    )
+    return response
 
 
 @app.middleware("http")
@@ -179,6 +253,7 @@ def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+<<<<<<< HEAD:api/main.py
 <<<<<<< HEAD
 def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
     user = API_KEYS.get(x_api_key)
@@ -189,6 +264,8 @@ def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
 
 =======
 >>>>>>> temp-repo-b-branch
+=======
+>>>>>>> origin/green:api/src/bookandride_api/main.py
 def coerce_book_payload(payload: dict[str, Any]) -> None:
     try:
         payload["id"] = int(payload["id"])
@@ -736,6 +813,7 @@ async def get_partner_rental(
 
 
 def calculate_price(minutes: int) -> float:
+    basic_logger.info("Calculating price for %d minutes", minutes)
     base = minutes * 0.25
     return min(base, 12.0)
 
@@ -747,6 +825,7 @@ def start_rental(
     user: str = Depends(verify_api_key),
     session: Session = Depends(get_session),
 ) -> RentalStartResponse:
+    basic_logger.info("User %s started rental on %s", user, payload.bike_id)
     started_at = datetime.now(tz=timezone.utc)
     record = RentalRecord(user=user, bike_id=payload.bike_id, started_at=started_at)
 =======
@@ -759,6 +838,14 @@ def start_rental(
     session.add(record)
     session.commit()
     session.refresh(record)
+
+    log_user_action(
+        LOGGER,
+        action="rental_start",
+        user_id=user,
+        bike_id=payload.bike_id,
+        rental_id=record.id,
+    )
 
     return RentalStartResponse(rental_id=record.id, started_at=record.started_at)
 
@@ -795,6 +882,24 @@ def stop_rental(
     record.price_eur = price
     session.add(record)
     session.commit()
+
+    basic_logger.info(
+        "Stopping rental",
+        extra={
+            "user": user,
+            "rental_id": record.id,
+            "duration_min": duration_minutes,
+            "price_eur": price,
+        },
+    )
+    log_user_action(
+        LOGGER,
+        action="rental_stop",
+        user_id=user,
+        rental_id=record.id,
+        duration_min=duration_minutes,
+        price_eur=price,
+    )
 
     return RentalStopResponse(duration_min=duration_minutes, price_eur=price)
 

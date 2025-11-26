@@ -2,7 +2,11 @@
 __pycache__/*
 hudjo712.code-workspace
 .env
+<<<<<<< HEAD
 =======
 hudjo712.code-workspace
 .env.example
 >>>>>>> temp-repo-b-branch
+=======
+.env.example
+>>>>>>> origin/green
