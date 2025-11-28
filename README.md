@@ -547,6 +547,11 @@ Connection: keep-alive
 
 
 
+see running rentals:
+cd /home/hudjo712/DataDevOps2/bookride-releases
+docker compose exec db psql -U app -d bookandride \
+  -c "select id, user, bike_id, started_at from rentals where stopped_at is null;"
+
 curl -X POST http://localhost:8080/rentals/start \
   -H "Content-Type: application/json" \
   -H "X-API-Key: admin-key-456" \

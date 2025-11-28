@@ -162,7 +162,9 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "expr": "(sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))) * 100",
+          "editorMode": "code",
+          "expr": "(sum(rate(http_requests_total{status_code=~\"4..|5..\"}[5m])) \r\n / sum(rate(http_requests_total[5m]))) * 100\r\n",
+          "range": true,
           "refId": "A"
         }
       ],
@@ -340,7 +342,7 @@
     "list": []
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -359,5 +361,5 @@
   "timezone": "browser",
   "title": "Book & Ride Observability",
   "uid": "bookride-obsv",
-  "version": 2
+  "version": 6
 }
