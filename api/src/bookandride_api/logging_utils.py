@@ -109,22 +109,24 @@ def configure_logging() -> logging.Logger:
     log_level = os.getenv("BOOKRIDE_LOG_LEVEL", "INFO").upper()
     logger.setLevel(log_level)
 
-    endpoint = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
-    index = os.getenv("ELASTICSEARCH_LOG_INDEX", "logs-demo")
-    username = os.getenv("ELASTIC_USERNAME")
-    password = os.getenv("ELASTIC_PASSWORD")
-    timeout = float(os.getenv("ELASTICSEARCH_TIMEOUT", "2"))
-    verify_ssl = _bool_env("ELASTICSEARCH_SSL_VERIFY", False)
+    disable_es = _bool_env("BOOKRIDE_DISABLE_ELASTIC", False)
+    if not disable_es:
+        endpoint = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
+        index = os.getenv("ELASTICSEARCH_LOG_INDEX", "logs-demo")
+        username = os.getenv("ELASTIC_USERNAME")
+        password = os.getenv("ELASTIC_PASSWORD")
+        timeout = float(os.getenv("ELASTICSEARCH_TIMEOUT", "2"))
+        verify_ssl = _bool_env("ELASTICSEARCH_SSL_VERIFY", False)
 
-    es_handler = ElasticsearchHandler(
-        endpoint=endpoint,
-        index=index,
-        username=username,
-        password=password,
-        timeout=timeout,
-        verify_ssl=verify_ssl,
-    )
-    logger.addHandler(es_handler)
+        es_handler = ElasticsearchHandler(
+            endpoint=endpoint,
+            index=index,
+            username=username,
+            password=password,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+        )
+        logger.addHandler(es_handler)
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))

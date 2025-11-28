@@ -1,0 +1,49 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: bookride_alerts
+    folder: bookride-alerts
+    interval: 30s
+    rules:
+      - uid: api_down
+        title: Bookride API Down
+        condition: B
+        for: 1m
+        noDataState: Alerting
+        execErrState: Error
+        notifications:
+          - uid: bookride-webhook
+        data:
+          - refId: A
+            datasourceUid: prometheus_uid
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus_uid
+              expr: up{job="bookride-api"} == 0
+              format: time_series
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+        annotations:
+          summary: "Bookride API scraping shows down"
+          description: "Prometheus reports up{job='bookride-api'} == 0 for >=1m."
+        labels:
+          severity: critical

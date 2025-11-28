@@ -1,0 +1,41 @@
+pipeline { 
+    agent any 
+ 
+    environment { 
+        DOCKER_IMAGE = "rdrio2/devopsbtsai:latest" 
+    } 
+ 
+    stages { 
+        stage('Checkout') { 
+            steps { 
+                git branch: 'main', credentialsId: 'github-ssh', url: 'git@github.com:Sucy64/DEVOPS1-Project.git'
+            } 
+        } 
+ 
+        stage('Install Dependencies') { 
+            steps { 
+                sh '''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r jenkins/requirements.txt
+                '''
+            } 
+        }
+
+        stage('Build Docker Image') { 
+            steps { 
+                sh 'docker compose -f project/docker-compose.yml build'
+            } 
+        } 
+ 
+        stage('Push Docker Image') { 
+            steps { 
+                withDockerRegistry([credentialsId: 'Docker-Cred', url: '']) { 
+                    sh 'docker compose -f project/docker-compose.yml push'
+                } 
+            } 
+        } 
+
+    }
+}

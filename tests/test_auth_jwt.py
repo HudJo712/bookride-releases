@@ -1,23 +1,12 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-try:
-    from api import main
-    from api.main import app, get_session
-except ImportError:
-    import main  # type: ignore
-    from main import app, get_session  # type: ignore
+from bookandride_api import main
+from bookandride_api.main import app, get_session
 
 
 @pytest.fixture(autouse=True)

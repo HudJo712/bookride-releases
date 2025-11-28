@@ -1,74 +1,26 @@
 from __future__ import annotations
 
 import json
-<<<<<<< HEAD:api/main.py
-<<<<<<< HEAD
-=======
 import logging
->>>>>>> origin/green:api/src/bookandride_api/main.py
 import os
 import time
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from hashlib import sha256
+import secrets
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 import xmltodict
 import yaml
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-=======
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Callable, Dict, Optional
-
-import xmltodict
-import yaml
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
->>>>>>> temp-repo-b-branch
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
 from jsonschema import ValidationError, validate
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
-<<<<<<< HEAD:api/main.py
-from pydantic import BaseModel, Field, field_validator
-<<<<<<< HEAD
-from sqlmodel import Session, SQLModel, create_engine
-
-from book_pb2 import Book as PbBook
-from rental_pb2 import PartnerRental as PbPartnerRental
-from models import BookRecord, PartnerRentalRecord, RentalRecord
-=======
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from sqlmodel import Session, select
-
-try:
-    from .auth import (
-        create_access_token,
-        get_current_user,
-        hash_password,
-        require_partner_token,
-        require_user_actor,
-        verify_password,
-    )
-    from .book_pb2 import Book as PbBook
-    from .rental_pb2 import PartnerRental as PbPartnerRental
-    from .models import BookRecord, PartnerRentalRecord, RentalRecord, User, get_session, init_db
-    from .schemas import LoginIn, MeOut, RegisterIn, TokenOut
-except ImportError:  # Fallback when running as a top-level module
-    from auth import (
-        create_access_token,
-        get_current_user,
-        hash_password,
-        require_partner_token,
-        require_user_actor,
-        verify_password,
-    )
-    from book_pb2 import Book as PbBook
-    from rental_pb2 import PartnerRental as PbPartnerRental
-    from models import BookRecord, PartnerRentalRecord, RentalRecord, User, get_session, init_db
-    from schemas import LoginIn, MeOut, RegisterIn, TokenOut
->>>>>>> temp-repo-b-branch
-=======
-from sqlmodel import Session
 
 from .auth import verify_api_key
 from .book_pb2 import Book as PbBook
@@ -76,19 +28,20 @@ from .config_loader import load_config
 from .database import engine, get_session, init_db
 from .logging_utils import configure_logging, log_user_action
 from .logging_config import logger as basic_logger
-from .models import BookRecord, PartnerRentalRecord, RentalRecord
+from .models import BookRecord, PartnerRentalRecord, RentalRecord, User
 from .rental_pb2 import PartnerRental as PbPartnerRental
 from .schemas import Book, PartnerRental, RentalStartRequest, RentalStartResponse, RentalStopRequest, RentalStopResponse
->>>>>>> origin/green:api/src/bookandride_api/main.py
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    with Session(engine) as session:
+        update_active_rentals_metric(session)
     yield
 
 
-app = FastAPI(title="Book & Ride API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Book & Ride API", version="0.2.0", lifespan=lifespan)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -105,91 +58,38 @@ SUPPORTED_MEDIA_TYPES: Dict[str, str] = {
     "application/x-protobuf": "proto",
 }
 
-<<<<<<< HEAD:api/main.py
-<<<<<<< HEAD
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bookandride.db")
-CONNECT_ARGS: dict[str, Any] = {}
-if DATABASE_URL.startswith("sqlite"):
-    CONNECT_ARGS["check_same_thread"] = False
-
-engine = create_engine(DATABASE_URL, echo=False, connect_args=CONNECT_ARGS, pool_pre_ping=True)
-
-
-def get_session() -> Iterator[Session]:
-    with Session(engine) as session:
-        yield session
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    SQLModel.metadata.create_all(engine)
-=======
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db()
->>>>>>> temp-repo-b-branch
-
-
-class Book(BaseModel):
-    id: int = Field(gt=0)
-    title: str
-    author: str
-    price: float = Field(ge=0)
-    in_stock: bool
-
-
-class PartnerRental(BaseModel):
-    id: int = Field(gt=0)
-    user_id: int = Field(gt=0)
-    bike_id: str
-    start_time: datetime
-    end_time: Optional[datetime] = None
-    price_eur: float = Field(ge=0)
-
-    @field_validator("start_time", "end_time", mode="before")
-    @classmethod
-    def ensure_iso8601(cls, value: Any):
-        if value is None:
-            return value
-        if isinstance(value, datetime):
-            return value.astimezone(timezone.utc)
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ValueError("Timestamp must be ISO-8601 with UTC 'Z' suffix") from exc
-            return parsed.astimezone(timezone.utc)
-        raise ValueError("Timestamp must be ISO-8601 with UTC 'Z' suffix")
-
-
-class RentalStartRequest(BaseModel):
-    bike_id: str = Field(min_length=1)
-
-
-class RentalStartResponse(BaseModel):
-    rental_id: int
-    started_at: datetime
-
-
-class RentalStopRequest(BaseModel):
-    rental_id: int = Field(gt=0)
-
-
-class RentalStopResponse(BaseModel):
-    duration_min: int
-    price_eur: float
-
-
-<<<<<<< HEAD
-API_KEYS: Dict[str, str] = {
-    "dev-key-123": "user1",
-    "admin-key-456": "admin",
-}
-=======
 configure_logging()
 LOGGER = logging.getLogger("bookride.api")
 CONFIG = load_config()
 CURRENT_ENV = os.getenv("APP_ENV", "dev")
+TOKEN_STORE: Dict[str, int] = {}
+security = HTTPBearer(auto_error=False)
+
+
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    if route and getattr(route, "path", None):
+        return route.path
+    return request.url.path
+
+
+def _hash_password(password: str) -> str:
+    return sha256(password.encode()).hexdigest()
+
+
+def _mint_token(user_id: int) -> str:
+    token = secrets.token_urlsafe(24)
+    TOKEN_STORE[token] = user_id
+    return token
+
+
+def require_bearer_user(cred: HTTPAuthorizationCredentials | None = Depends(security)) -> int:
+    if not cred or cred.scheme.lower() != "bearer":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
+    user_id = TOKEN_STORE.get(cred.credentials)
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    return user_id
 
 
 @app.get("/info", tags=["system"])
@@ -200,17 +100,50 @@ def info():
         "service_url": CONFIG["SERVICE_URL"],
         "debug": CONFIG["DEBUG"],
     }
->>>>>>> origin/green:api/src/bookandride_api/main.py
 
 
-=======
->>>>>>> temp-repo-b-branch
-REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests served")
+
+REQUEST_COUNT = Counter(
+    "http_requests_total",
+    "Total HTTP requests served",
+    ["method", "path", "status_code"],
+)
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "Duration of HTTP requests in seconds",
+    ["method", "path"],
+    buckets=[0.05, 0.1, 0.2, 0.5, 1, 2, 5],
+)
+REQUEST_ERRORS = Counter(
+    "http_error_responses_total",
+    "HTTP responses with status codes >= 400",
+    ["method", "path", "status_code"],
+)
+REQUESTS_IN_PROGRESS = Gauge(
+    "http_requests_in_progress",
+    "Number of HTTP requests currently being processed",
+    ["path"],
+)
+ACTIVE_RENTALS = Gauge("bookandride_active_rentals", "Number of active bike rentals")
+RENTAL_PRICE_EUR = Histogram(
+    "bookandride_rental_price_eur",
+    "Rental price distribution",
+    buckets=[2, 4, 6, 8, 10, 12],
+)
+
+
+def update_active_rentals_metric(session: Session) -> None:
+    active = session.exec(select(RentalRecord).where(RentalRecord.stopped_at.is_(None))).all()
+    ACTIVE_RENTALS.set(len(active))
 
 
 @app.middleware("http")
 async def observability_logging(request: Request, call_next):
+    path_template = _route_template(request)
+    track_metrics = path_template != "/metrics"
     start_time = time.perf_counter()
+    if track_metrics:
+        REQUESTS_IN_PROGRESS.labels(path=path_template).inc()
     try:
         response = await call_next(request)
     except Exception:
@@ -222,10 +155,18 @@ async def observability_logging(request: Request, call_next):
                 "method": request.method,
                 "status_code": 500,
                 "response_time_ms": duration_ms,
+                "route": path_template,
             },
             exc_info=True,
         )
+        if track_metrics:
+            REQUEST_LATENCY.labels(method=request.method, path=path_template).observe(duration_ms / 1000.0)
+            REQUEST_COUNT.labels(method=request.method, path=path_template, status_code="500").inc()
+            REQUEST_ERRORS.labels(method=request.method, path=path_template, status_code="500").inc()
         raise
+    finally:
+        if track_metrics:
+            REQUESTS_IN_PROGRESS.labels(path=path_template).dec()
     duration_ms = int((time.perf_counter() - start_time) * 1000)
     log_fn = LOGGER.error if response.status_code >= 500 else LOGGER.info
     log_fn(
@@ -235,16 +176,22 @@ async def observability_logging(request: Request, call_next):
             "method": request.method,
             "status_code": response.status_code,
             "response_time_ms": duration_ms,
+            "route": path_template,
         },
     )
-    return response
-
-
-@app.middleware("http")
-async def count_requests(request: Request, call_next):
-    response = await call_next(request)
-    if request.url.path != "/metrics":
-        REQUEST_COUNT.inc()
+    if track_metrics:
+        REQUEST_LATENCY.labels(method=request.method, path=path_template).observe(duration_ms / 1000.0)
+        REQUEST_COUNT.labels(
+            method=request.method,
+            path=path_template,
+            status_code=str(response.status_code),
+        ).inc()
+        if response.status_code >= 400:
+            REQUEST_ERRORS.labels(
+                method=request.method,
+                path=path_template,
+                status_code=str(response.status_code),
+            ).inc()
     return response
 
 
@@ -252,20 +199,49 @@ async def count_requests(request: Request, call_next):
 def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+@app.websocket("/ws/metrics")
+async def websocket_metrics(ws: WebSocket):
+    await ws.accept()
+    try:
+        while True:
+            samples = ACTIVE_RENTALS.collect()[0].samples
+            active_value = samples[0].value if samples else 0
+            await ws.send_json({"active_rentals": int(active_value)})
+            await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws.close()
 
-<<<<<<< HEAD:api/main.py
-<<<<<<< HEAD
-def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
-    user = API_KEYS.get(x_api_key)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-    return user
+
+@app.post("/register", status_code=status.HTTP_201_CREATED)
+def register_user(payload: Dict[str, str], session: Session = Depends(get_session)) -> Dict[str, str]:
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email and password required")
+    existing = session.exec(select(User).where(User.email == email)).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = User(email=email, password_hash=_hash_password(password))
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    token = _mint_token(user.id)
+    return {"access_token": token, "token_type": "bearer"}
 
 
-=======
->>>>>>> temp-repo-b-branch
-=======
->>>>>>> origin/green:api/src/bookandride_api/main.py
+@app.post("/login")
+def login_user(payload: Dict[str, str], session: Session = Depends(get_session)) -> Dict[str, str]:
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user or user.password_hash != _hash_password(password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = _mint_token(user.id)
+    return {"access_token": token, "token_type": "bearer"}
+
+
 def coerce_book_payload(payload: dict[str, Any]) -> None:
     try:
         payload["id"] = int(payload["id"])
@@ -684,15 +660,11 @@ def negotiate_accept(accept_header: Optional[str]) -> str:
 
 
 @app.post("/books")
-<<<<<<< HEAD
-async def create_book(request: Request, session: Session = Depends(get_session)) -> Response:
-=======
 async def create_book(
     request: Request,
-    _user=Depends(get_current_user),
     session: Session = Depends(get_session),
+    _user_id: int = Depends(require_bearer_user),
 ) -> Response:
->>>>>>> temp-repo-b-branch
     content_type = (request.headers.get("Content-Type") or "").split(";")[0]
     body = await request.body()
     payload = parse_body(body, content_type)
@@ -715,33 +687,19 @@ async def create_book(
     return response
 
 
-<<<<<<< HEAD
-@app.get("/books/{book_id}")
-async def get_book(book_id: int, request: Request, session: Session = Depends(get_session)) -> Response:
-=======
 @app.get("/books")
-async def list_books(
-    request: Request,
-    _user=Depends(get_current_user),
-    session: Session = Depends(get_session),
-) -> Response:
+def list_books(session: Session = Depends(get_session), _user_id: int = Depends(require_bearer_user)) -> list[dict]:
     records = session.exec(select(BookRecord)).all()
-    books = [record.model_dump() for record in records]
-    pretty = parse_pretty_flag(request.query_params.get("pretty"))
-    accept = negotiate_book_accept(request.headers.get("Accept"))
-    if accept == "application/x-protobuf":
-        raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail="Protobuf not supported for book lists")
-    return render(books, accept, "book", pretty)
+    return [record.model_dump() for record in records]
 
 
 @app.get("/books/{book_id}")
 async def get_book(
     book_id: int,
     request: Request,
-    _user=Depends(get_current_user),
     session: Session = Depends(get_session),
+    _user_id: int = Depends(require_bearer_user),
 ) -> Response:
->>>>>>> temp-repo-b-branch
     record = session.get(BookRecord, book_id)
     if not record:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -752,15 +710,7 @@ async def get_book(
 
 
 @app.post("/rentals")
-<<<<<<< HEAD
 async def create_partner_rental(request: Request, session: Session = Depends(get_session)) -> Response:
-=======
-async def create_partner_rental(
-    request: Request,
-    _claims: Dict[str, Any] = Depends(require_partner_token(["partner.rentals"])),
-    session: Session = Depends(get_session),
-) -> Response:
->>>>>>> temp-repo-b-branch
     content_type = (request.headers.get("Content-Type") or "").split(";")[0]
     body = await request.body()
     data = _parse_payload(body, content_type, "rental")
@@ -793,16 +743,7 @@ async def create_partner_rental(
 
 
 @app.get("/rentals/{rental_id}")
-<<<<<<< HEAD
 async def get_partner_rental(rental_id: int, request: Request, session: Session = Depends(get_session)) -> Response:
-=======
-async def get_partner_rental(
-    rental_id: int,
-    request: Request,
-    _claims: Dict[str, Any] = Depends(require_partner_token(["partner.rentals"])),
-    session: Session = Depends(get_session),
-) -> Response:
->>>>>>> temp-repo-b-branch
     record = session.get(PartnerRentalRecord, rental_id)
     if not record:
         raise HTTPException(status_code=404, detail="Rental not found")
@@ -821,20 +762,12 @@ def calculate_price(minutes: int) -> float:
 @app.post("/rentals/start", response_model=RentalStartResponse)
 def start_rental(
     payload: RentalStartRequest,
-<<<<<<< HEAD
     user: str = Depends(verify_api_key),
     session: Session = Depends(get_session),
 ) -> RentalStartResponse:
     basic_logger.info("User %s started rental on %s", user, payload.bike_id)
     started_at = datetime.now(tz=timezone.utc)
     record = RentalRecord(user=user, bike_id=payload.bike_id, started_at=started_at)
-=======
-    principal: str = Depends(require_user_actor(["rentals:write"])),
-    session: Session = Depends(get_session),
-) -> RentalStartResponse:
-    started_at = datetime.now(tz=timezone.utc)
-    record = RentalRecord(user=principal, bike_id=payload.bike_id, started_at=started_at)
->>>>>>> temp-repo-b-branch
     session.add(record)
     session.commit()
     session.refresh(record)
@@ -847,25 +780,19 @@ def start_rental(
         rental_id=record.id,
     )
 
+    update_active_rentals_metric(session)
+
     return RentalStartResponse(rental_id=record.id, started_at=record.started_at)
 
 
 @app.post("/rentals/stop", response_model=RentalStopResponse)
 def stop_rental(
     payload: RentalStopRequest,
-<<<<<<< HEAD
     user: str = Depends(verify_api_key),
     session: Session = Depends(get_session),
 ) -> RentalStopResponse:
     record = session.get(RentalRecord, payload.rental_id)
     if record is None or record.user != user:
-=======
-    principal: str = Depends(require_user_actor(["rentals:write"])),
-    session: Session = Depends(get_session),
-) -> RentalStopResponse:
-    record = session.get(RentalRecord, payload.rental_id)
-    if record is None or record.user != str(principal):
->>>>>>> temp-repo-b-branch
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rental not found")
 
     if record.stopped_at is not None:
@@ -900,6 +827,9 @@ def stop_rental(
         duration_min=duration_minutes,
         price_eur=price,
     )
+
+    update_active_rentals_metric(session)
+    RENTAL_PRICE_EUR.observe(price)
 
     return RentalStopResponse(duration_min=duration_minutes, price_eur=price)
 
@@ -966,44 +896,3 @@ async def convert(request: Request, to: str, pretty: bool = Query(True)) -> Resp
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "version": app.version}
-<<<<<<< HEAD
-=======
-@app.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
-def register(
-    payload: RegisterIn,
-    session: Session = Depends(get_session),
-) -> TokenOut:
-    existing = session.exec(select(User).where(User.email == payload.email)).first()
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered")
-    password_hash = hash_password(payload.password)
-    user = User(
-        username=payload.email,
-        email=payload.email,
-        password_hash=password_hash,
-        role="user",
-    )
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    token = create_access_token(user_id=user.id, email=user.email, role=user.role, scopes=(user.scopes or "").split())
-    return TokenOut(access_token=token, token_type="bearer")
-
-
-@app.post("/login", response_model=TokenOut)
-@app.post("/auth/login", response_model=TokenOut)
-def login(
-    payload: LoginIn,
-    session: Session = Depends(get_session),
-) -> TokenOut:
-    user = session.exec(select(User).where(User.email == payload.email)).first()
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(user_id=user.id, email=user.email, role=user.role, scopes=(user.scopes or "").split())
-    return TokenOut(access_token=token, token_type="bearer")
-
-
-@app.get("/me", response_model=MeOut)
-def me(current: User = Depends(get_current_user)) -> MeOut:
-    return MeOut(id=current.id, email=current.email, role=current.role)
->>>>>>> temp-repo-b-branch

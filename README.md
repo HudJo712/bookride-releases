@@ -31,6 +31,9 @@ ACCESS_TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
 # Partners can use their own IdP tokens if OIDC_* vars are configured.
 ```
 
+### Logging note
+- Local scrapes and `/metrics` are faster if you keep `BOOKRIDE_DISABLE_ELASTIC=true` (defaults in `.env.example`). This disables the Elasticsearch logging handler that can block requests when ES is slow/unreachable.
+
 ### OAuth / OIDC
 1. Set `OIDC_ISS`, `OIDC_AUD`, and `OIDC_JWKS_URL` in `.env`.
 2. Restart the API container so JWKS metadata is loaded.
@@ -512,3 +515,47 @@ Uvicorn entrypoint: `bookandride_api.main:app` on port 8080.
 - Logging behavior: `tests/test_logging.py`
 - Simple helpers: `tests/test_core.py`
 >>>>>>> origin/green
+
+### Unit 08
+## test trigger
+# assuming you have an endpoint that returns 500 for test
+for i in {1..50}; do
+ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/badendpoint
+done
+
+for testing
+# Fetch a JWT access token
+
+TOKEN=$(curl -s -X POST http://localhost:8080/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"changeme"}' \
+  | jq -r .access_token)
+echo "$TOKEN"
+
+curl -i -X POST http://localhost:8080/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"changeme"}'
+
+HTTP/1.1 200 OK
+Server: nginx/1.29.2
+Date: Thu, 27 Nov 2025 14:04:14 GMT
+Content-Type: application/json
+Content-Length: 73
+Connection: keep-alive
+
+{"access_token":"b_nvSYY87MEtQ-0KhRarrGitM33m7Kv0","token_type":"bearer"}
+
+
+
+curl -X POST http://localhost:8080/rentals/start \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: admin-key-456" \
+  -d '{"bike_id":"B-99"}'
+
+see grafana
+
+curl -X POST http://localhost:8080/rentals/stop \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: admin-key-456" \
+  -d '{"rental_id":1}'
+

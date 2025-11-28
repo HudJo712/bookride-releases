@@ -9,13 +9,16 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Allow opting into dev dependencies (e.g., pytest) at build time.
+ARG INSTALL_DEV=false
+
 COPY pyproject.toml RELEASE_NOTES.md ./
 COPY api ./api
 
 ENV PYTHONPATH="/app/api/src:${PYTHONPATH}"
 
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir .
+    && pip install --no-cache-dir .${INSTALL_DEV:+[dev]}
 
 EXPOSE 8080
 

@@ -1,0 +1,8 @@
+docker-plugin
+docker-workflow
+kubernetes
+git
+github
+workflow-aggregator
+credentials
+blueocean
