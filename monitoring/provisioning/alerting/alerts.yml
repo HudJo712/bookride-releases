@@ -7,13 +7,14 @@ groups:
     interval: 30s
     rules:
       - uid: api_down
-        title: Bookride API Down
-        condition: B
+        title: High 4xx/5xx Error Rate (5m)
+        condition: D
         for: 1m
         noDataState: Alerting
         execErrState: Error
         notifications:
-          - uid: bookride-webhook
+          - uid: discord-receiver
+          - uid: bookride-webhook-listener
         data:
           - refId: A
             datasourceUid: prometheus_uid
@@ -21,13 +22,93 @@ groups:
               datasource:
                 type: prometheus
                 uid: prometheus_uid
-              expr: up{job="bookride-api"} == 0
+              expr: sum(rate(http_requests_total{status_code=~"4..|5.."}[5m]))
               format: time_series
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
             relativeTimeRange:
               from: 60
+              to: 0
+          - refId: B
+            datasourceUid: prometheus_uid
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus_uid
+              expr: sum(rate(http_requests_total[5m]))
+              format: time_series
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              type: math
+              expression: 100 * $A / $B
+              refId: C
+            relativeTimeRange:
+              from: 60
+              to: 0
+          - refId: D
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              type: reduce
+              expression: C
+              reducer: last
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [100]
+                  operator:
+                    type: and
+                  query:
+                    params: [D]
+                  reducer:
+                    type: last
+              refId: D
+            relativeTimeRange:
+              from: 60
+              to: 0
+        annotations:
+          summary: "4xx/5xx error rate reached 100% over 5m window"
+          description: "((4xx+5xx) / all) * 100 over 5m has exceeded 100%"
+          contact_name: "HudJo712"
+        labels:
+          severity: critical
+
+      - uid: high_memory
+        title: High Memory Usage
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        notifications:
+          - uid: discord-receiver
+          - uid: bookride-webhook-listener
+        data:
+          - refId: A
+            datasourceUid: prometheus_uid
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus_uid
+              expr: sum(container_memory_usage_bytes{name=~".+"}) > 500000000
+              format: time_series
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+            relativeTimeRange:
+              from: 300
               to: 0
           - refId: B
             datasourceUid: __expr__
@@ -40,10 +121,11 @@ groups:
               reducer: last
               refId: B
             relativeTimeRange:
-              from: 60
+              from: 300
               to: 0
         annotations:
-          summary: "Bookride API scraping shows down"
-          description: "Prometheus reports up{job='bookride-api'} == 0 for >=1m."
+          summary: "High memory usage on container"
+          description: "Container memory usage exceeded 500MB."
+          contact_name: "HudJo712"
         labels:
-          severity: critical
+          severity: warning

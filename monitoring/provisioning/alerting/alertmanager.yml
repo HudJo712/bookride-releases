@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# Grafana-managed Alertmanager config routing to both receivers.
+alertmanager:
+  receivers:
+    - name: Discord
+      grafana_managed_receiver_configs:
+        - uid: discord-receiver
+    - name: bookride-webhook-listener
+      grafana_managed_receiver_configs:
+        - uid: bookride-webhook-listener
+  route:
+    receiver: Discord
+    routes:
+      - receiver: bookride-webhook-listener

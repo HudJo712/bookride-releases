@@ -520,7 +520,7 @@ Uvicorn entrypoint: `bookandride_api.main:app` on port 8080.
 ## test trigger
 # assuming you have an endpoint that returns 500 for test
 for i in {1..50}; do
- curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/badendpoint
+ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/badendpoint
 done
 
 for testing
@@ -564,3 +564,7 @@ curl -X POST http://localhost:8080/rentals/stop \
   -H "X-API-Key: admin-key-456" \
   -d '{"rental_id":1}'
 
+grafana webhook listener
+curl -X POST http://localhost:8000/alerts \
+  -H "Content-Type: application/json" \
+  -d '{"status":"firing","commonLabels":{"alertname":"TestAlert"},"commonAnnotations":{"summary":"hi","description":"test"}}'

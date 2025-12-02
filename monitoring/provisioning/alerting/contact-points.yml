@@ -2,11 +2,22 @@ apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: bookride-webhook
+    name: Discord
     receivers:
-      - uid: bookride-webhook
-        type: webhook
+      - uid: discord-receiver
+        type: discord
         settings:
           url: ${GRAFANA_WEBHOOK_URL}
+          use_discord_username: false
+        disableResolveMessage: false
+
+
+  - orgId: 1
+    name: bookride-webhook-listener
+    receivers:
+      - uid: bookride-webhook-listener
+        type: webhook
+        settings:
+          url: ${GRAFANA_WEBHOOK_LISTENER_URL}
           httpMethod: POST
         disableResolveMessage: false

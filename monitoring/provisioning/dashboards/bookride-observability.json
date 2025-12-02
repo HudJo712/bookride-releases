@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 3,
   "links": [],
   "panels": [
     {
@@ -359,7 +359,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Book & Ride Observability",
-  "uid": "bookride-obsv",
-  "version": 6
+  "title": "Book & Ride Observability Copy",
+  "uid": "024ff28e-3418-47b3-88c7-38b7a123a63a",
+  "version": 1
 }

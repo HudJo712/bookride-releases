@@ -213,7 +213,9 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - ALERT_CONTACT_NAME=${ALERT_CONTACT_NAME:-Hudjo}
       - GRAFANA_WEBHOOK_URL=${GRAFANA_WEBHOOK_URL:-http://webhook-listener:8000/alerts}
+      - GRAFANA_WEBHOOK_LISTENER_URL=${GRAFANA_WEBHOOK_LISTENER_URL:-http://webhook-listener:8000/alerts}
     restart: unless-stopped
 
   webhook-listener:
@@ -224,6 +226,9 @@ services:
       - gateway-net
     ports:
       - "8000:8000"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - ALERT_CONTACT_NAME=${ALERT_CONTACT_NAME:-Hudjo}
     restart: unless-stopped
 
   jenkins:
@@ -236,7 +241,13 @@ services:
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
-      # - /var/run/docker.sock:/var/run/docker.sock  # enable if Jenkins should build Docker images
+      # Run init scripts on every boot to (re)seed admin users
+      - ./jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      - /var/run/docker.sock:/var/run/docker.sock  # enable if Jenkins should build Docker images
+    environment:
+      - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-admin}
+      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
     restart: unless-stopped
 
 volumes:
