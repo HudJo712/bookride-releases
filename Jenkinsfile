@@ -8,6 +8,7 @@ pipeline {
     environment {
         VENV = ".venv"
         DOCKER_IMAGE = "bookride-api:latest"
+        GITHUB_TOKEN = credentials('your-credential-id')
     }
 
     stages {

@@ -82,7 +82,7 @@ groups:
         annotations:
           summary: "4xx/5xx error rate reached 100% over 5m window"
           description: "((4xx+5xx) / all) * 100 over 5m has exceeded 100%"
-          contact_name: "HudJo712"
+          contact_name: "HudJo712"                   
         labels:
           severity: critical
 
