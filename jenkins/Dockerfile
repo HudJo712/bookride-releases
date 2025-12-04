@@ -2,16 +2,24 @@ FROM jenkins/jenkins:lts
 
 USER root
 
-# Create docker group with GID 989 and add jenkins user to it
-RUN groupadd -for -g 989 docker && usermod -aG docker jenkins
+# Align docker group GID with host (override via build arg if needed)
+ARG DOCKER_GID=989
+RUN groupadd -for -g ${DOCKER_GID} docker && usermod -aG docker jenkins
 
-# Install dependencies (python3, pip, docker.io), clean up afterwards
+# Install dependencies (python3, pip, curl), clean up afterwards
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip python3-venv docker.io && \
+    apt-get install -y python3 python3-pip python3-venv curl && \
     ln -sf /usr/bin/python3 /usr/bin/python && \
     ln -sf /usr/bin/pip3 /usr/bin/pip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Install recent Docker CLI to satisfy newer daemon API requirements
+ARG DOCKER_CLI_VERSION=29.0.0
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz \
+    -o /tmp/docker.tgz && \
+    tar xz -C /usr/local/bin --strip-components=1 -f /tmp/docker.tgz docker/docker && \
+    rm /tmp/docker.tgz
 
 # Install Docker Compose CLI plugin
 RUN mkdir -p /usr/local/lib/docker/cli-plugins && \

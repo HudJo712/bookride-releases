@@ -229,7 +229,11 @@ services:
     restart: unless-stopped
 
   jenkins:
-    image: jenkins/jenkins:lts
+    build:
+      context: ./jenkins
+      args:
+        DOCKER_GID: ${DOCKER_GID:-989}
+    image: bookride-jenkins:lts
     container_name: jenkins
     networks:
       - gateway-net

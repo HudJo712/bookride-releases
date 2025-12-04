@@ -568,3 +568,16 @@ grafana webhook listener
 curl -X POST http://localhost:8000/alerts \
   -H "Content-Type: application/json" \
   -d '{"status":"firing","commonLabels":{"alertname":"TestAlert"},"commonAnnotations":{"summary":"hi","description":"test"}}'
+
+### Jenkins
+Every push/build it will:
+
+Fetch the repo with a stored GitHub PAT so Jenkins can read it.
+Create an isolated venv, install dependencies, and run the test suite so you catch breaks early.
+Build the Python package and a Docker image so you have shippable artifacts.
+Gate success on all of the above so you get a single green/red signal instead of guessing.
+In short, you set it up to automate the quality and packaging steps you’d otherwise do by hand—consistent builds, verified tests, and a ready-to-run image for deployment.
+
+docker images | grep bookride-api
+
+bookride-api:latest
