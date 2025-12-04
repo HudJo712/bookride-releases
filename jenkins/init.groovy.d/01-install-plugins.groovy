@@ -17,7 +17,7 @@ def plugins = [
   'pipeline-stage-tags-metadata','pipeline-model-definition',
   'lockable-resources','okhttp-api','github-api','github','github-branch-source',
   'pipeline-github-lib','subversion','ssh-slaves','matrix-auth','pam-auth','ldap',
-  'email-ext','jsch','scm-api'
+  'email-ext','jsch','scm-api','workflow-aggregator','pipeline-graph-view','dark-theme', 
 ]
 
 def j = Jenkins.instance

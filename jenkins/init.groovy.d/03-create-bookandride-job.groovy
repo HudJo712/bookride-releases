@@ -27,11 +27,16 @@ def CpsScmFlowDef   = cl.loadClass('org.jenkinsci.plugins.workflow.cps.CpsScmFlo
 // settings – change these
 def jobName    = 'Book and Ride – CI Pipeline'
 def repoUrl    = 'https://github.com/HudJo712/bookride-releases.git'
-def branchSpec = '*/main'
+def branchSpec = '*/blue'
 def scriptPath = 'Jenkinsfile'
 def credId     = 'github-pat'
 def ghUser     = 'HudJo712'
-def ghPAT      = System.getenv("GITHUB_TOKEN")
+def ghPAT      = System.getenv("GITHUB_PAT")
+
+if (!ghPAT) {
+  println "Skipping job creation; GITHUB_PAT not provided."
+  return
+}
 
 // ensure credential
 def store = j.getExtensionList('com.cloudbees.plugins.credentials.SystemCredentialsProvider')[0].getStore()

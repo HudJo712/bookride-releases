@@ -8,7 +8,7 @@ pipeline {
     environment {
         VENV = ".venv"
         DOCKER_IMAGE = "bookride-api:latest"
-        GITHUB_TOKEN = credentials('your-credential-id')
+        GITHUB_PAT = credentials('github-pat')
     }
 
     stages {
@@ -75,7 +75,9 @@ pipeline {
             echo 'Book & Ride CI pipeline failed.'
         }
         cleanup {
-            sh 'rm -rf ${VENV} build dist reports || true'
+            dir(env.WORKSPACE) {
+                sh 'rm -rf ${VENV} build dist reports || true'
+            }
         }
     }
 }

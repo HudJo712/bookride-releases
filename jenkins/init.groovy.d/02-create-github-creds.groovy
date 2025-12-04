@@ -24,7 +24,12 @@ def UPCI            = cl.loadClass('com.cloudbees.plugins.credentials.impl.Usern
 // set values (use env vars or replace placeholders)
 def credId = 'github-pat'
 def ghUser = System.getenv('GITHUB_USER') ?: 'HudJo712'
-def ghPAT  = System.getenv('GITHUB_PAT')  ?: '<github-personal-access-token>'
+def ghPAT  = System.getenv('GITHUB_PAT')
+
+if (!ghPAT) {
+  println "Skipping credential creation; GITHUB_PAT not provided."
+  return
+}
 
 def store = j.getExtensionList('com.cloudbees.plugins.credentials.SystemCredentialsProvider')[0].getStore()
 if (!store.getCredentials(Domain.global()).any { it.id == credId }) {

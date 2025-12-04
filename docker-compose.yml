@@ -108,7 +108,6 @@ services:
     container_name: api_blue
     command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
-      - .env.example
       - .env
     environment:
       - APP_ENV=staging   # or dev/prod; just needs to differ
@@ -131,7 +130,6 @@ services:
     container_name: api_green
     command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
-      - .env.example
       - .env
     environment:
       - APP_ENV=prod      # different env to prove config switch
@@ -150,7 +148,7 @@ services:
   db:
     image: postgres:16-alpine
     env_file:
-      - .env.example
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev123}
@@ -227,7 +225,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - ALERT_CONTACT_NAME=${ALERT_CONTACT_NAME:-Hudjo}
     restart: unless-stopped
 
@@ -239,6 +236,8 @@ services:
     ports:
       - "8081:8080"   # avoid clashing with nginx on 8080
       - "50000:50000"
+    env_file:
+      - .env
     volumes:
       - jenkins_home:/var/jenkins_home
       # Run init scripts on every boot to (re)seed admin users
@@ -247,7 +246,9 @@ services:
     environment:
       - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-admin}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Dhttp.socketTimeout=300000 -Dhttp.connectionTimeout=300000
+      
+
     restart: unless-stopped
 
 volumes:
