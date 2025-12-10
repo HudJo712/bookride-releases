@@ -1,10 +1,13 @@
 def runChecked(String label, Closure body) {
     echo "Starting ${label}..."
+    notifyWebhook(label, "starting")
     try {
         body()
         echo "${label} succeeded."
+        notifyWebhook(label, "succeeded")
     } catch (err) {
         echo "${label} failed: ${err}"
+        notifyWebhook(label, "failed")
         throw err
     }
 }
@@ -18,6 +21,19 @@ ${command}
     }
 }
 
+def notifyWebhook(String label, String status) {
+    if (!env.STAGE_WEBHOOK_URL?.trim()) {
+        echo "Webhook skipped for ${label} (${status}); STAGE_WEBHOOK_URL not set."
+        return
+    }
+    sh """#!/usr/bin/env bash
+set -euo pipefail
+curl -sS -X POST -H 'Content-Type: application/json' -d @- "${STAGE_WEBHOOK_URL}" <<JSON
+{"content":"${JOB_NAME} #${BUILD_NUMBER}: ${label} -> ${status} (${BUILD_URL})","stage":"${label}","status":"${status}","job":"${JOB_NAME}","build":"${BUILD_NUMBER}","url":"${BUILD_URL}"}
+JSON
+"""
+}
+
 pipeline {
     agent any
 
@@ -29,6 +45,7 @@ pipeline {
         VENV = ".venv"
         DOCKER_IMAGE = "bookride-api:latest"
         GITHUB_PAT = credentials('github-pat')
+        STAGE_WEBHOOK_URL = credentials('stage-webhook')
     }
 
     stages {
