@@ -49,6 +49,7 @@ pipeline {
         DOCKER_IMAGE = "bookride-api:latest"
         GITHUB_PAT = credentials('github-pat')
         STAGE_WEBHOOK_URL = credentials('stage-webhook')
+        BRANCH_SPEC = "blue"
     }
 
     stages {
@@ -59,6 +60,22 @@ pipeline {
                         // Uses the repository configured on the Jenkins job (adjust to explicit URL if needed)
                         checkout scm
                     }
+                }
+            }
+        }
+
+        stage('Verify Latest Commit') {
+            steps {
+                script {
+                    shChecked('Verify Latest Commit', '''
+                        git fetch origin ${BRANCH_SPEC}
+                        LOCAL=$(git rev-parse HEAD)
+                        REMOTE=$(git rev-parse origin/${BRANCH_SPEC})
+                        if [ "$LOCAL" != "$REMOTE" ]; then
+                            echo "Local commit $LOCAL is behind remote $REMOTE on ${BRANCH_SPEC}. Aborting build."
+                            exit 1
+                        fi
+                    ''')
                 }
             }
         }

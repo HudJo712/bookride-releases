@@ -23,6 +23,8 @@ def GitSCM          = cl.loadClass('hudson.plugins.git.GitSCM')
 def BranchSpec      = cl.loadClass('hudson.plugins.git.BranchSpec')
 def WorkflowJob     = cl.loadClass('org.jenkinsci.plugins.workflow.job.WorkflowJob')
 def CpsScmFlowDef   = cl.loadClass('org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition')
+def SCMTrigger      = cl.loadClass('hudson.triggers.SCMTrigger')
+def GitHubPushTrigger = cl.loadClass('com.cloudbees.jenkins.GitHubPushTrigger')
 
 // settings – change these
 def jobName    = 'Book and Ride – CI Pipeline'
@@ -57,5 +59,12 @@ def scm = GitSCM.newInstance(GitSCM.createRepoList(repoUrl, credId),
 def defn = CpsScmFlowDef.newInstance(scm, scriptPath)
 defn.setLightweight(true)
 job.setDefinition(defn)
+// configure triggers: GitHub webhook + periodic poll fallback
+def triggers = [
+  SCMTrigger.newInstance("H/5 * * * *"), // poll every 5 minutes as fallback
+  GitHubPushTrigger.newInstance()
+]
+triggers.each { t -> job.addTrigger(t) }
 job.save()
-println "Created/updated job: ${jobName}"
+triggers.each { t -> t.start(job, true) }
+println "Created/updated job: ${jobName} with SCM triggers"
