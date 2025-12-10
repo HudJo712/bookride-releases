@@ -11,10 +11,10 @@ def runChecked(String label, Closure body) {
 
 def shChecked(String label, String command) {
     runChecked(label) {
-        sh """
-            set -euo pipefail
-            ${command}
-        """
+        sh """#!/usr/bin/env bash
+set -euo pipefail
+${command}
+"""
     }
 }
 
