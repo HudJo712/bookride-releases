@@ -26,10 +26,13 @@ def notifyWebhook(String label, String status) {
         echo "Webhook skipped for ${label} (${status}); STAGE_WEBHOOK_URL not set."
         return
     }
+    def job = env.JOB_NAME ?: ''
+    def build = env.BUILD_NUMBER ?: ''
+    def url = env.BUILD_URL ?: ''
     sh """#!/usr/bin/env bash
 set -euo pipefail
 curl -sS -X POST -H 'Content-Type: application/json' -d @- "${STAGE_WEBHOOK_URL}" <<JSON
-{"content":"${JOB_NAME} #${BUILD_NUMBER}: ${label} -> ${status} (${BUILD_URL})","stage":"${label}","status":"${status}","job":"${JOB_NAME}","build":"${BUILD_NUMBER}","url":"${BUILD_URL}"}
+{"content":"${job} #${build}: ${label} -> ${status} (${url})","stage":"${label}","status":"${status}","job":"${job}","build":"${build}","url":"${url}"}
 JSON
 """
 }
