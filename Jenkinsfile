@@ -1,3 +1,23 @@
+def runChecked(String label, Closure body) {
+    echo "Starting ${label}..."
+    try {
+        body()
+        echo "${label} succeeded."
+    } catch (err) {
+        echo "${label} failed: ${err}"
+        throw err
+    }
+}
+
+def shChecked(String label, String command) {
+    runChecked(label) {
+        sh """
+            set -euo pipefail
+            ${command}
+        """
+    }
+}
+
 pipeline {
     agent any
 
@@ -14,31 +34,37 @@ pipeline {
     stages {
         stage('Checkout Book & Ride Code') {
             steps {
-                // Uses the repository configured on the Jenkins job (adjust to explicit URL if needed)
-                checkout scm
+                script {
+                    runChecked('Checkout Book & Ride Code') {
+                        // Uses the repository configured on the Jenkins job (adjust to explicit URL if needed)
+                        checkout scm
+                    }
+                }
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    set -e
-                    python3 -m venv ${VENV}
-                    . ${VENV}/bin/activate
-                    pip install --upgrade pip build
-                    pip install -e .[dev]
-                '''
+                script {
+                    shChecked('Install Dependencies', '''
+                        python3 -m venv ${VENV}
+                        . ${VENV}/bin/activate
+                        pip install --upgrade pip build
+                        pip install -e .[dev]
+                    ''')
+                }
             }
         }
 
         stage('Run Book & Ride Tests') {
             steps {
-                sh '''
-                    set -e
-                    . ${VENV}/bin/activate
-                    mkdir -p reports
-                    pytest -q --junitxml=reports/pytest-report.xml
-                '''
+                script {
+                    shChecked('Run Book & Ride Tests', '''
+                        . ${VENV}/bin/activate
+                        mkdir -p reports
+                        pytest -q --junitxml=reports/pytest-report.xml
+                    ''')
+                }
             }
             post {
                 always {
@@ -49,20 +75,22 @@ pipeline {
 
         stage('Build Package (sdist + wheel)') {
             steps {
-                sh '''
-                    set -e
-                    . ${VENV}/bin/activate
-                    python -m build
-                '''
+                script {
+                    shChecked('Build Package', '''
+                        . ${VENV}/bin/activate
+                        python -m build
+                    ''')
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                    set -e
-                    docker build -t ${DOCKER_IMAGE} -f api/Dockerfile .
-                '''
+                script {
+                    shChecked('Build Docker Image', '''
+                        docker build -t ${DOCKER_IMAGE} -f api/Dockerfile .
+                    ''')
+                }
             }
         }
     }
