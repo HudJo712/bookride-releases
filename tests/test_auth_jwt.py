@@ -11,6 +11,7 @@ from bookandride_api.main import app, get_session
 
 @pytest.fixture(autouse=True)
 def setup_database():
+    print("This Hello is in the database setup test")
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
