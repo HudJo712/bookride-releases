@@ -59,9 +59,9 @@ def scm = GitSCM.newInstance(GitSCM.createRepoList(repoUrl, credId),
 def defn = CpsScmFlowDef.newInstance(scm, scriptPath)
 defn.setLightweight(true)
 job.setDefinition(defn)
-// configure triggers: GitHub webhook + periodic poll fallback
+// add SCM triggers: GitHub webhook + polling fallback
 def triggers = [
-  SCMTrigger.newInstance("H/5 * * * *"), // poll every 5 minutes as fallback
+  SCMTrigger.newInstance("H/5 * * * *"),
   GitHubPushTrigger.newInstance()
 ]
 triggers.each { t -> job.addTrigger(t) }
