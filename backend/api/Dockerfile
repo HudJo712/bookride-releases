@@ -12,8 +12,9 @@ RUN apt-get update \
 # Allow opting into dev dependencies (e.g., pytest) at build time.
 ARG INSTALL_DEV=false
 
-COPY pyproject.toml RELEASE_NOTES.md ./
-COPY api ./api
+COPY backend/pyproject.toml ./pyproject.toml
+COPY docs/RELEASE_NOTES.md ./RELEASE_NOTES.md
+COPY backend/api ./api
 
 ENV PYTHONPATH="/app/api/src:${PYTHONPATH}"
 

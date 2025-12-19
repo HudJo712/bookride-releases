@@ -80,7 +80,7 @@ services:
 
       echo "Bootstrap complete."
     volumes:
-      - ./kibana:/kibana:ro
+      - ./ops/monitoring/kibana:/kibana:ro
     restart: "no"
 
   elasticsearch:
@@ -104,7 +104,7 @@ services:
   api_blue:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: backend/api/Dockerfile
     container_name: api_blue
     command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
@@ -119,14 +119,13 @@ services:
     networks:
       - gateway-net
     volumes:
-      - ./api:/app
-      - ./tests:/app/tests:ro
+      - ./backend:/app
     restart: unless-stopped
 
   api_green:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: backend/api/Dockerfile
     container_name: api_green
     command: uvicorn bookandride_api.main:app --host 0.0.0.0 --port 8080
     env_file:
@@ -141,8 +140,7 @@ services:
     networks:
       - gateway-net
     volumes:
-      - ./api:/app
-      - ./tests:/app/tests:ro
+      - ./backend:/app
     restart: unless-stopped
 
   db:
@@ -176,11 +174,15 @@ services:
       - gateway-net
     ports:
       - "8080:80"
+      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/active-upstream.conf:/etc/nginx/conf.d/active-upstream.conf:ro
-      - ./nginx/upstream.blue.conf:/etc/nginx/conf.d/upstream.blue.conf:ro
-      - ./nginx/upstream.green.conf:/etc/nginx/conf.d/upstream.green.conf:ro
+      - ./ops/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ops/nginx/active-upstream.conf:/etc/nginx/conf.d/active-upstream.conf:ro
+      - ./ops/nginx/upstream.blue.conf:/etc/nginx/conf.d/upstream.blue.conf:ro
+      - ./ops/nginx/upstream.green.conf:/etc/nginx/conf.d/upstream.green.conf:ro
+      - ./ops/nginx/tls.crt:/etc/nginx/certs/server.crt:ro
+      - ./ops/nginx/tls.key:/etc/nginx/certs/server.key:ro
+
     restart: unless-stopped
 
   prometheus:
@@ -193,7 +195,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     restart: unless-stopped
 
   grafana:
@@ -205,7 +207,7 @@ services:
       - gateway-net
     volumes:
       - grafana-storage:/var/lib/grafana
-      - ./monitoring/provisioning:/etc/grafana/provisioning
+      - ./ops/monitoring/provisioning:/etc/grafana/provisioning
     ports:
       - "3000:3000"
     environment:
@@ -218,7 +220,7 @@ services:
 
   webhook-listener:
     build:
-      context: ./monitoring/webhook_listener
+      context: ./ops/monitoring/webhook_listener
     container_name: webhook-listener
     networks:
       - gateway-net
@@ -230,7 +232,7 @@ services:
 
   jenkins:
     build:
-      context: ./jenkins
+      context: ./ops/jenkins
       args:
         DOCKER_GID: ${DOCKER_GID:-989}
     image: bookride-jenkins:lts
@@ -245,7 +247,7 @@ services:
     volumes:
       - jenkins_home:/var/jenkins_home
       # Run init scripts on every boot to (re)seed admin users
-      - ./jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      - ./ops/jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
       - /var/run/docker.sock:/var/run/docker.sock  # enable if Jenkins should build Docker images
     environment:
       - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-admin}
