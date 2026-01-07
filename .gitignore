@@ -3,3 +3,5 @@ hudjo712.code-workspace
 .env
 csr.pem
 private-key.pem
+frontend/node_modules/*
+frontend/vendor/*

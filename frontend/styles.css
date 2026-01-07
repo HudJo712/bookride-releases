@@ -1,0 +1,227 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root {
+  --bg: #0d1218;
+  --bg-alt: #131b23;
+  --panel: #161f2a;
+  --panel-strong: #1b2733;
+  --accent: #f5b92e;
+  --accent-2: #3cd3a4;
+  --ink: #e7eef7;
+  --muted: #9fb0c3;
+  --danger: #ff6b6b;
+  --shadow: 0 18px 40px rgba(5, 8, 12, 0.35);
+  --radius: 18px;
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-body: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: radial-gradient(circle at top left, #1d2530, #0b0f14 55%, #090c10 100%);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 120px 120px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.bg-glow {
+  position: fixed;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  filter: blur(10px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.bg-glow-a {
+  top: -140px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(245, 185, 46, 0.55), transparent 70%);
+}
+
+.bg-glow-b {
+  bottom: -160px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(60, 211, 164, 0.5), transparent 70%);
+}
+
+.hero {
+  padding: 64px 6vw 30px;
+}
+
+.hero-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeUp 0.8s ease;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 0.75rem;
+  color: var(--accent-2);
+  margin: 0;
+}
+
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.8rem, 5vw, 4.8rem);
+  margin: 0;
+  line-height: 1;
+}
+
+.subhead {
+  color: var(--muted);
+  font-size: 1.1rem;
+  max-width: 520px;
+  margin: 0;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  gap: 24px;
+  padding: 0 6vw 80px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.br-card {
+  background: linear-gradient(160deg, rgba(25, 33, 44, 0.92), rgba(17, 25, 34, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: fadeUp 0.8s ease;
+}
+
+.br-card-header h2 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+}
+
+.br-card-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inline {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.br-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.form-check-label {
+  display: inline;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--panel-strong);
+  border-radius: 14px;
+}
+
+.metrics .label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.metrics .value {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.output {
+  grid-column: 1 / -1;
+}
+
+.output-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+pre {
+  background: #0b1015;
+  border-radius: 14px;
+  padding: 16px;
+  color: #d2dcec;
+  overflow-x: auto;
+  min-height: 180px;
+}
+
+.footer {
+  padding: 0 6vw 40px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding-top: 48px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

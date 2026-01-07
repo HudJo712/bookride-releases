@@ -14,7 +14,8 @@ from typing import Any, Callable, Dict, Optional
 import xmltodict
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
@@ -41,14 +42,26 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Book & Ride API", version="0.2.0", lifespan=lifespan)
-
-
 BASE_DIR = Path(__file__).resolve().parent
+FRONTEND_DIR = None
+for candidate in BASE_DIR.parents:
+    maybe_frontend = candidate / "frontend"
+    if maybe_frontend.exists():
+        FRONTEND_DIR = maybe_frontend
+        break
+
+app = FastAPI(title="Book & Ride API", version="0.2.0", lifespan=lifespan)
 BOOK_SCHEMA_PATH = BASE_DIR / "schemas" / "book.schema.json"
 RENTAL_SCHEMA_PATH = BASE_DIR / "schemas" / "rental.schema.json"
 BOOK_JSON_SCHEMA = json.loads(BOOK_SCHEMA_PATH.read_text())
 RENTAL_SCHEMA = json.loads(RENTAL_SCHEMA_PATH.read_text())
+
+if FRONTEND_DIR and FRONTEND_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=FRONTEND_DIR, html=True), name="ui")
+
+    @app.get("/", include_in_schema=False)
+    def ui_root() -> RedirectResponse:
+        return RedirectResponse(url="/ui")
 
 
 SUPPORTED_MEDIA_TYPES: Dict[str, str] = {
