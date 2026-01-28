@@ -115,6 +115,7 @@ services:
       - .env
     environment:
       - APP_ENV=staging   # or dev/prod; just needs to differ
+      - ROOT_PATH=/api
     depends_on:
       db:
         condition: service_healthy
@@ -136,6 +137,7 @@ services:
       - .env
     environment:
       - APP_ENV=prod      # different env to prove config switch
+      - ROOT_PATH=/api
     depends_on:
       db:
         condition: service_healthy

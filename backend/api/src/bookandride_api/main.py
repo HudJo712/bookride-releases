@@ -62,7 +62,12 @@ for candidate in BASE_DIR.parents:
         FRONTEND_DIR = maybe_frontend
         break
 
-app = FastAPI(title="Book & Ride API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(
+    title="Book & Ride API",
+    version="0.2.0",
+    lifespan=lifespan,
+    root_path=os.getenv("ROOT_PATH", ""),
+)
 BOOK_SCHEMA_PATH = BASE_DIR / "schemas" / "book.schema.json"
 RENTAL_SCHEMA_PATH = BASE_DIR / "schemas" / "rental.schema.json"
 BOOK_JSON_SCHEMA = json.loads(BOOK_SCHEMA_PATH.read_text())
