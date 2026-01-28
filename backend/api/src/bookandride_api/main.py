@@ -6,7 +6,7 @@ import os
 import time
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import secrets
 from pathlib import Path
@@ -22,6 +22,7 @@ from google.protobuf.message import DecodeError
 from jsonschema import ValidationError, validate
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from sqlmodel import Session, select
+from sqlalchemy import distinct
 
 from .auth import verify_api_key
 from .book_pb2 import Book as PbBook
@@ -29,9 +30,20 @@ from .config_loader import load_config
 from .database import engine, get_session, init_db
 from .logging_utils import configure_logging, log_user_action
 from .logging_config import logger as basic_logger
-from .models import BookRecord, PartnerRentalRecord, RentalRecord, User
+from .models import BikeRecord, BookLoanRecord, BookRecord, PartnerRentalRecord, RentalRecord, User
 from .rental_pb2 import PartnerRental as PbPartnerRental
-from .schemas import Book, PartnerRental, RentalStartRequest, RentalStartResponse, RentalStopRequest, RentalStopResponse
+from .schemas import (
+    Book,
+    BookLoanStartRequest,
+    BookLoanStartResponse,
+    BookLoanStopRequest,
+    BookLoanStopResponse,
+    PartnerRental,
+    RentalStartRequest,
+    RentalStartResponse,
+    RentalStopRequest,
+    RentalStopResponse,
+)
 
 
 @asynccontextmanager
@@ -61,7 +73,11 @@ if FRONTEND_DIR and FRONTEND_DIR.exists():
 
     @app.get("/", include_in_schema=False)
     def ui_root() -> RedirectResponse:
-        return RedirectResponse(url="/ui")
+        return RedirectResponse(url="/ui/index.html")
+
+    @app.get("/index", include_in_schema=False)
+    def ui_index() -> RedirectResponse:
+        return RedirectResponse(url="/ui/index.html")
 
 
 SUPPORTED_MEDIA_TYPES: Dict[str, str] = {
@@ -77,6 +93,9 @@ CONFIG = load_config()
 CURRENT_ENV = os.getenv("APP_ENV", "dev")
 TOKEN_STORE: Dict[str, int] = {}
 security = HTTPBearer(auto_error=False)
+BOOK_LOAN_UPFRONT_FEE_EUR = 5.0
+BOOK_LOAN_OVERDUE_FINE_EUR = 10.0
+BOOK_LOAN_DURATION_LIMIT = timedelta(minutes=5)
 
 
 def _route_template(request: Request) -> str:
@@ -105,6 +124,26 @@ def require_bearer_user(cred: HTTPAuthorizationCredentials | None = Depends(secu
     return user_id
 
 
+def is_developer_email(email: str) -> bool:
+    raw_admins = CONFIG.get("ADMIN_EMAILS") or []
+    if isinstance(raw_admins, str):
+        raw_admins = [item.strip() for item in raw_admins.split(",")]
+    admins = {item.strip().lower() for item in raw_admins if item}
+    return email.strip().lower() in admins
+
+
+def require_developer_user(
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> int:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not is_developer_email(user.email):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Developer access required")
+    return user_id
+
+
 @app.get("/info", tags=["system"])
 def info():
     return {
@@ -113,6 +152,18 @@ def info():
         "service_url": CONFIG["SERVICE_URL"],
         "debug": CONFIG["DEBUG"],
     }
+
+
+@app.get("/access", tags=["auth"])
+def access_role(
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> Dict[str, str]:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    role = "developer" if is_developer_email(user.email) else "guest"
+    return {"role": role, "email": user.email, "user_id": str(user.id or "")}
 
 
 
@@ -241,7 +292,14 @@ def register_user(payload: Dict[str, str], session: Session = Depends(get_sessio
     session.commit()
     session.refresh(user)
     token = _mint_token(user.id)
-    return {"access_token": token, "token_type": "bearer"}
+    role = "developer" if is_developer_email(user.email) else "guest"
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": role,
+        "email": user.email,
+        "user_id": str(user.id or ""),
+    }
 
 
 @app.post("/login")
@@ -252,7 +310,14 @@ def login_user(payload: Dict[str, str], session: Session = Depends(get_session))
     if not user or user.password_hash != _hash_password(password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = _mint_token(user.id)
-    return {"access_token": token, "token_type": "bearer"}
+    role = "developer" if is_developer_email(user.email) else "guest"
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": role,
+        "email": user.email,
+        "user_id": str(user.id or ""),
+    }
 
 
 def coerce_book_payload(payload: dict[str, Any]) -> None:
@@ -706,6 +771,24 @@ def list_books(session: Session = Depends(get_session), _user_id: int = Depends(
     return [record.model_dump() for record in records]
 
 
+def apply_overdue_book_fines(user: User, loans: list[BookLoanRecord], session: Session) -> bool:
+    now = datetime.now(tz=timezone.utc)
+    updated = False
+    for loan in loans:
+        if loan.returned_at is not None:
+            continue
+        if loan.due_at and loan.due_at < now and not loan.fine_applied:
+            loan.fine_applied = True
+            loan.fine_eur = BOOK_LOAN_OVERDUE_FINE_EUR
+            user.balance_due = float(user.balance_due or 0) + BOOK_LOAN_OVERDUE_FINE_EUR
+            session.add(loan)
+            updated = True
+    if updated:
+        session.add(user)
+        session.commit()
+    return updated
+
+
 @app.get("/books/{book_id}")
 async def get_book(
     book_id: int,
@@ -720,6 +803,236 @@ async def get_book(
     pretty = parse_pretty_flag(request.query_params.get("pretty"))
     accept = negotiate_book_accept(request.headers.get("Accept"))
     return render_book(book, accept, pretty)
+
+
+@app.post("/book-loans/start", response_model=BookLoanStartResponse)
+def start_book_loan(
+    payload: BookLoanStartRequest,
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> BookLoanStartResponse:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    book = session.get(BookRecord, payload.book_id)
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    if not book.in_stock:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Book is already lent out")
+
+    active_loans = session.exec(
+        select(BookLoanRecord)
+        .where(BookLoanRecord.user_id == user_id)
+        .where(BookLoanRecord.returned_at.is_(None))
+    ).all()
+
+    apply_overdue_book_fines(user, active_loans, session)
+    if float(user.balance_due or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Outstanding fees. Please pay your balance before lending again.",
+        )
+
+    if len(active_loans) >= 2:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Loan limit reached (max 2 books).")
+
+    started_at = datetime.now(tz=timezone.utc)
+    due_at = started_at + BOOK_LOAN_DURATION_LIMIT
+    record = BookLoanRecord(
+        user_id=user_id,
+        user=user.email,
+        book_id=payload.book_id,
+        started_at=started_at,
+        due_at=due_at,
+        upfront_fee_eur=BOOK_LOAN_UPFRONT_FEE_EUR,
+    )
+    user.balance_due = float(user.balance_due or 0) + BOOK_LOAN_UPFRONT_FEE_EUR
+    book.in_stock = False
+    session.add(record)
+    session.add(book)
+    session.add(user)
+    session.commit()
+    session.refresh(record)
+    return BookLoanStartResponse(
+        loan_id=record.id,
+        started_at=record.started_at,
+        due_at=due_at,
+        balance_due=float(user.balance_due or 0),
+    )
+
+
+@app.post("/book-loans/stop", response_model=BookLoanStopResponse)
+def stop_book_loan(
+    payload: BookLoanStopRequest,
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> BookLoanStopResponse:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    record = session.get(BookLoanRecord, payload.loan_id)
+    if record is None or record.user_id != user_id or record.user != user.email:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Loan not found")
+    if record.returned_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Loan already returned")
+
+    book = session.get(BookRecord, record.book_id)
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+
+    returned_at = datetime.now(tz=timezone.utc)
+    started_at = record.started_at
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    duration_days = max(1, int((returned_at - started_at).total_seconds() // 86400))
+    fine_applied = bool(record.fine_applied)
+    fine_eur = float(record.fine_eur or 0)
+    if record.due_at and returned_at > record.due_at and not record.fine_applied:
+        fine_applied = True
+        fine_eur = BOOK_LOAN_OVERDUE_FINE_EUR
+        record.fine_applied = True
+        record.fine_eur = fine_eur
+        user.balance_due = float(user.balance_due or 0) + fine_eur
+    record.returned_at = returned_at
+    book.in_stock = True
+    session.add(record)
+    session.add(book)
+    session.add(user)
+    session.commit()
+
+    return BookLoanStopResponse(
+        duration_days=duration_days,
+        returned_at=returned_at,
+        balance_due=float(user.balance_due or 0),
+        fine_applied=fine_applied,
+        fine_eur=fine_eur,
+    )
+
+
+@app.get("/book-loans/active")
+def list_active_book_loans(
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    loans = session.exec(
+        select(BookLoanRecord)
+        .where(BookLoanRecord.user_id == user_id)
+        .where(BookLoanRecord.returned_at.is_(None))
+    ).all()
+    apply_overdue_book_fines(user, loans, session)
+    response = []
+    for loan in loans:
+        book = session.get(BookRecord, loan.book_id)
+        response.append(
+            {
+                "loan_id": loan.id,
+                "book_id": loan.book_id,
+                "title": book.title if book else "",
+                "author": book.author if book else "",
+                "started_at": loan.started_at,
+                "due_at": loan.due_at,
+                "fine_applied": bool(loan.fine_applied),
+            }
+        )
+    return response
+
+
+@app.get("/bikes", tags=["bikes"])
+def list_bikes(session: Session = Depends(get_session), _user_id: int = Depends(require_bearer_user)) -> list[dict]:
+    active_ids = session.exec(
+        select(distinct(RentalRecord.bike_id)).where(RentalRecord.stopped_at.is_(None))
+    ).all()
+    active_set = {item for item in active_ids if item}
+    records = session.exec(select(BikeRecord).where(BikeRecord.is_active.is_(True))).all()
+    available = [record for record in records if record.id not in active_set]
+    return [record.model_dump() for record in available]
+
+
+@app.post("/bikes", tags=["bikes"])
+async def upsert_bike(
+    request: Request,
+    session: Session = Depends(get_session),
+    _user_id: int = Depends(require_developer_user),
+) -> dict:
+    payload = await request.json()
+    bike_id = (payload.get("id") or "").strip()
+    if not bike_id:
+        raise HTTPException(status_code=400, detail="Bike id required")
+    record = session.get(BikeRecord, bike_id)
+    data = {
+        "id": bike_id,
+        "model": payload.get("model", ""),
+        "color": payload.get("color", ""),
+        "year": int(payload.get("year", 0) or 0),
+        "rate_per_minute": float(payload.get("rate_per_minute", 0) or 0),
+        "price_cap_eur": float(payload.get("price_cap_eur", 12.0) or 12.0),
+        "is_active": bool(payload.get("is_active", True)),
+    }
+    if record:
+        for key, value in data.items():
+            setattr(record, key, value)
+    else:
+        record = BikeRecord(**data)
+        session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record.model_dump()
+
+
+@app.delete("/bikes/{bike_id}", tags=["bikes"])
+def delete_bike(
+    bike_id: str,
+    session: Session = Depends(get_session),
+    _user_id: int = Depends(require_developer_user),
+) -> dict:
+    record = session.get(BikeRecord, bike_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Bike not found")
+    session.delete(record)
+    session.commit()
+    return {"deleted": bike_id}
+
+
+@app.get("/bikes/all", tags=["bikes"])
+def list_all_bikes(
+    session: Session = Depends(get_session),
+    _user_id: int = Depends(require_developer_user),
+) -> list[dict]:
+    records = session.exec(select(BikeRecord)).all()
+    return [record.model_dump() for record in records]
+
+
+@app.get("/rentals/active", tags=["rentals"])
+def list_active_rentals(
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    records = session.exec(
+        select(RentalRecord)
+        .where(RentalRecord.user_id == user_id)
+        .where(RentalRecord.user == user.email)
+        .where(RentalRecord.stopped_at.is_(None))
+    ).all()
+    response = []
+    for record in records:
+        bike = session.get(BikeRecord, record.bike_id)
+        response.append(
+            {
+                "rental_id": record.id,
+                "bike_id": record.bike_id,
+                "bike_model": bike.model if bike else "",
+                "rate_per_minute": bike.rate_per_minute if bike else None,
+                "price_cap_eur": bike.price_cap_eur if bike else None,
+                "started_at": record.started_at,
+            }
+        )
+    return response
 
 
 @app.post("/rentals")
@@ -798,6 +1111,37 @@ def start_rental(
     return RentalStartResponse(rental_id=record.id, started_at=record.started_at)
 
 
+@app.post("/rentals/start-auth", response_model=RentalStartResponse)
+def start_rental_auth(
+    payload: RentalStartRequest,
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> RentalStartResponse:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    existing = session.exec(
+        select(RentalRecord)
+        .where(RentalRecord.bike_id == payload.bike_id)
+        .where(RentalRecord.stopped_at.is_(None))
+    ).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bike is already rented")
+    started_at = datetime.now(tz=timezone.utc)
+    record = RentalRecord(
+        user_id=user_id,
+        user=user.email,
+        bike_id=payload.bike_id,
+        started_at=started_at,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    update_active_rentals_metric(session)
+
+    return RentalStartResponse(rental_id=record.id, started_at=record.started_at)
+
+
 @app.post("/rentals/stop", response_model=RentalStopResponse)
 def stop_rental(
     payload: RentalStopRequest,
@@ -845,6 +1189,73 @@ def stop_rental(
     RENTAL_PRICE_EUR.observe(price)
 
     return RentalStopResponse(duration_min=duration_minutes, price_eur=price)
+
+
+@app.post("/rentals/stop-auth", response_model=RentalStopResponse)
+def stop_rental_auth(
+    payload: RentalStopRequest,
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> RentalStopResponse:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    record = session.get(RentalRecord, payload.rental_id)
+    if record is None or record.user_id != user_id or record.user != user.email:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rental not found")
+
+    if record.stopped_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rental already stopped")
+
+    stopped_at = datetime.now(tz=timezone.utc)
+    started_at = record.started_at
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    duration_minutes = max(1, int((stopped_at - started_at).total_seconds() // 60))
+    price = calculate_price(duration_minutes)
+    record.stopped_at = stopped_at
+    record.total_minutes = duration_minutes
+    record.price_eur = price
+    user.balance_due = float(user.balance_due or 0) + price
+    session.add(record)
+    session.add(user)
+    session.commit()
+
+    update_active_rentals_metric(session)
+    RENTAL_PRICE_EUR.observe(price)
+
+    return RentalStopResponse(duration_min=duration_minutes, price_eur=price)
+
+
+@app.get("/balance", tags=["rentals"])
+def get_balance(
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    loans = session.exec(
+        select(BookLoanRecord)
+        .where(BookLoanRecord.user_id == user_id)
+        .where(BookLoanRecord.returned_at.is_(None))
+    ).all()
+    apply_overdue_book_fines(user, loans, session)
+    return {"balance_due": float(user.balance_due or 0)}
+
+
+@app.post("/balance/pay", tags=["rentals"])
+def pay_balance(
+    user_id: int = Depends(require_bearer_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    user.balance_due = 0.0
+    session.add(user)
+    session.commit()
+    return {"balance_due": 0.0}
 
 
 @app.post("/convert")

@@ -3,239 +3,66 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Book & Ride Control Room</title>
+  <title>Book & Ride Access</title>
   <link rel="stylesheet" href="./vendor/bootstrap/bootstrap.min.css" />
   <link rel="stylesheet" href="styles.css" />
-  <script defer src="app.js"></script>
+  <script defer src="auth.js?v=4"></script>
 </head>
 <body data-bs-theme="dark">
   <div class="bg-grid"></div>
   <div class="bg-glow bg-glow-a"></div>
   <div class="bg-glow bg-glow-b"></div>
 
-  <header class="hero">
-    <div class="hero-inner container">
-      <p class="eyebrow">Book & Ride API</p>
-      <h1>Control Room</h1>
-      <p class="subhead">A focused cockpit for testing core endpoints with clean responses and sharp feedback.</p>
-      <div class="hero-actions">
-        <button class="btn btn-outline-light" id="ping-health" type="button">Ping Health</button>
-        <button class="btn btn-outline-light" id="load-info" type="button">Load Info</button>
+  <div class="screen">
+    <header class="auth-hero">
+      <div class="auth-hero-inner container">
+        <p class="eyebrow">Book & Ride Access</p>
+        <h1>Sign in to continue</h1>
+        <p class="subhead">Admin credentials go to the control room. Guest accounts land in the overview dashboard.</p>
       </div>
-    </div>
-  </header>
-
-  <main class="grid container">
-    <section class="card br-card">
-      <div class="br-card-header">
-        <h2>Connection</h2>
-        <p>Set the base URL and tokens used for requests.</p>
-      </div>
-      <form id="connection-form" class="stack">
-        <label>
-          Base URL
-          <input class="form-control" type="text" id="base-url" name="baseUrl" placeholder="/api" required />
-        </label>
-        <label>
-          Bearer token
-          <input class="form-control" type="text" id="bearer-token" name="bearerToken" placeholder="paste access token" />
-        </label>
-        <label>
-          API key (X-API-Key)
-          <input class="form-control" type="text" id="api-key" name="apiKey" placeholder="dev-key-123" />
-        </label>
-        <button class="btn btn-primary" type="submit">Save connection</button>
-      </form>
-    </section>
-
-    <section class="card br-card">
-      <div class="br-card-header">
-        <h2>Auth</h2>
-        <p>Register and login to get a bearer token.</p>
-      </div>
-      <form id="register-form" class="stack">
-        <div class="inline">
-          <label>
-            Email
-            <input class="form-control" type="email" name="email" required />
-          </label>
-          <label>
-            Password
-            <input class="form-control" type="password" name="password" required />
-          </label>
+    </header>
+    <main class="auth-grid container">
+      <section class="card br-card auth-card">
+        <div class="br-card-header">
+          <h2>Sign in</h2>
+          <p>Use your credentials to access the right dashboard.</p>
         </div>
-        <button class="btn btn-primary" type="submit">Register</button>
-      </form>
-      <form id="login-form" class="stack">
-        <div class="inline">
-          <label>
-            Email
-            <input class="form-control" type="email" name="email" required />
-          </label>
-          <label>
-            Password
-            <input class="form-control" type="password" name="password" required />
-          </label>
-        </div>
-        <button class="btn btn-primary" type="submit">Login</button>
-      </form>
-    </section>
-
-    <section class="card br-card">
-      <div class="br-card-header">
-        <h2>Books</h2>
-        <p>Bearer auth required for book endpoints.</p>
-      </div>
-      <div class="stack">
-        <button class="btn btn-primary" type="button" id="list-books">List books</button>
-        <form id="get-book-form" class="inline">
-          <label>
-            Book ID
-            <input class="form-control" type="number" name="bookId" min="1" required />
-          </label>
-          <button class="btn btn-primary" type="submit">Get book</button>
-        </form>
-        <form id="create-book-form" class="stack">
+        <form id="login-form" class="stack">
           <div class="inline">
             <label>
-              ID
-              <input class="form-control" type="number" name="id" min="1" required />
+              Email
+              <input class="form-control" type="email" name="email" required />
             </label>
             <label>
-              Price
-              <input class="form-control" type="number" name="price" min="0" step="0.01" required />
+              Password
+              <input class="form-control" type="password" name="password" required />
             </label>
           </div>
+          <label>
+            Base URL
+            <input class="form-control" type="text" id="auth-base-url" name="baseUrl" placeholder="/api" required />
+          </label>
+          <button class="btn btn-primary" type="submit">Login</button>
+        </form>
+        <div class="auth-divider">New here?</div>
+        <form id="register-form" class="stack">
           <div class="inline">
             <label>
-              Title
-              <input class="form-control" type="text" name="title" required />
+              Email
+              <input class="form-control" type="email" name="email" required />
             </label>
             <label>
-              Author
-              <input class="form-control" type="text" name="author" required />
+              Password
+              <input class="form-control" type="password" name="password" required />
             </label>
           </div>
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="in-stock" name="inStock" />
-            <label class="form-check-label" for="in-stock">In stock</label>
-          </div>
-          <button class="btn btn-primary" type="submit">Create / Update book</button>
+          <p class="subhead">New accounts are guest-only. Control room access is assigned by admins.</p>
+          <button class="btn btn-outline-light" type="submit">Create account</button>
         </form>
-      </div>
-    </section>
-
-    <section class="card br-card">
-      <div class="br-card-header">
-        <h2>Rentals</h2>
-        <p>Uses API key header.</p>
-      </div>
-      <form id="start-rental-form" class="stack">
-        <label>
-          Bike ID
-          <input class="form-control" type="text" name="bikeId" required />
-        </label>
-        <button class="btn btn-primary" type="submit">Start rental</button>
-      </form>
-      <form id="stop-rental-form" class="stack">
-        <label>
-          Rental ID
-          <input class="form-control" type="number" name="rentalId" min="1" required />
-        </label>
-        <button class="btn btn-primary" type="submit">Stop rental</button>
-      </form>
-      <div class="metrics">
-        <div>
-          <p class="label">Active rentals</p>
-          <p class="value" id="active-rentals">--</p>
-        </div>
-        <button class="btn btn-outline-info" type="button" id="toggle-metrics">Connect metrics</button>
-      </div>
-    </section>
-
-    <section class="card br-card">
-      <div class="br-card-header">
-        <h2>Partner rentals</h2>
-        <p>XML, JSON, YAML, or protobuf supported. This form sends JSON.</p>
-      </div>
-      <form id="create-partner-rental-form" class="stack">
-        <div class="inline">
-          <label>
-            ID
-            <input class="form-control" type="number" name="id" min="1" required />
-          </label>
-          <label>
-            User ID
-            <input class="form-control" type="number" name="userId" min="1" required />
-          </label>
-        </div>
-        <div class="inline">
-          <label>
-            Bike ID
-            <input class="form-control" type="text" name="bikeId" required />
-          </label>
-          <label>
-            Price (EUR)
-            <input class="form-control" type="number" name="price" min="0" step="0.01" required />
-          </label>
-        </div>
-        <div class="inline">
-          <label>
-            Start time (ISO-8601 UTC)
-            <input class="form-control" type="text" name="startTime" placeholder="2024-05-10T12:00:00Z" required />
-          </label>
-          <label>
-            End time (optional)
-            <input class="form-control" type="text" name="endTime" placeholder="2024-05-10T12:30:00Z" />
-          </label>
-        </div>
-        <button class="btn btn-primary" type="submit">Create / Update partner rental</button>
-      </form>
-      <form id="get-partner-rental-form" class="inline">
-        <label>
-          Rental ID
-          <input class="form-control" type="number" name="rentalId" min="1" required />
-        </label>
-        <button class="btn btn-primary" type="submit">Get partner rental</button>
-      </form>
-    </section>
-
-    <section class="card br-card">
-      <div class="br-card-header">
-        <h2>Convert payload</h2>
-        <p>Send JSON and convert to JSON, XML, YAML, or protobuf.</p>
-      </div>
-      <form id="convert-form" class="stack">
-        <label>
-          Target format
-          <select class="form-select" name="target">
-            <option value="json">JSON</option>
-            <option value="xml">XML</option>
-            <option value="yaml">YAML</option>
-            <option value="protobuf">Protobuf</option>
-          </select>
-        </label>
-        <label>
-          JSON payload
-          <textarea class="form-control" name="payload" rows="6">{"hello":"world"}</textarea>
-        </label>
-        <button class="btn btn-primary" type="submit">Convert</button>
-      </form>
-    </section>
-
-    <section class="card br-card output">
-      <div class="br-card-header">
-        <h2>Response</h2>
-        <p>Status, headers, and body appear here.</p>
-      </div>
-      <div class="output-meta" id="output-meta">No requests yet.</div>
-      <pre id="output-body">{}</pre>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <p>Tip: Use dev-key-123 for rentals and register/login for bearer tokens.</p>
-  </footer>
+        <div class="auth-message" id="auth-message">Sign in to continue.</div>
+      </section>
+    </main>
+  </div>
 
   <script src="./vendor/bootstrap/bootstrap.bundle.min.js"></script>
 </body>

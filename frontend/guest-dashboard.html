@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Book & Ride Guest Dashboard</title>
+  <link rel="stylesheet" href="./vendor/bootstrap/bootstrap.min.css" />
+  <link rel="stylesheet" href="styles.css?v=2" />
+  <script defer src="guest-dashboard.js?v=3"></script>
+</head>
+<body data-bs-theme="dark">
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <header class="hero">
+    <div class="hero-inner container">
+      <p class="eyebrow">Book & Ride</p>
+      <h1>Guest overview</h1>
+      <p class="subhead">Explore available bikes and books with a quick overview.</p>
+      <div class="account-chip" id="account-chip">
+        <span class="chip-label">Signed in as</span>
+        <span class="chip-value" id="guest-email">--</span>
+        <span class="chip-meta">
+          <span id="guest-user-id">--</span>
+          <span aria-hidden="true">•</span>
+          <span id="guest-base-url">--</span>
+        </span>
+      </div>
+      <div class="account-debt">
+        Total due: <span id="guest-total-due">EUR 0.00</span>
+        <button class="btn btn-outline-light btn-sm" id="pay-balance" type="button">Pay</button>
+      </div>
+      <div class="notice hidden" id="guest-notice" role="status" aria-live="polite"></div>
+      <div class="hero-actions">
+        <button class="btn btn-outline-danger" id="logout" type="button">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid container">
+    <section class="card br-card guest-tabs">
+      <div class="br-card-header">
+        <h2>Explore</h2>
+        <p>Switch between bikes and books to browse availability.</p>
+      </div>
+      <div class="tab-buttons">
+        <button class="btn btn-outline-light" type="button" id="tab-bikes">Bikes</button>
+        <button class="btn btn-outline-light" type="button" id="tab-books">Books</button>
+      </div>
+      <div class="tab-panel" id="panel-bikes">
+        <div class="stack">
+          <div class="bike-columns">
+            <div class="mini-card">
+              <div class="mini-card-header">
+                <h3>Available bikes</h3>
+                <p>Choose a bike to rent next.</p>
+              </div>
+              <ul class="item-list" id="bike-list"></ul>
+            </div>
+            <div class="mini-card">
+              <div class="mini-card-header">
+                <h3>Your rented bikes</h3>
+                <p>Rides tied to your account.</p>
+              </div>
+              <ul class="item-list" id="rented-list"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel hidden" id="panel-books">
+        <div class="stack">
+          <div class="bike-columns">
+            <div class="mini-card">
+              <div class="mini-card-header">
+                <h3>Available books</h3>
+                <p>Pick a title to lend for 5 minutes.</p>
+              </div>
+              <ul class="item-list" id="book-list"></ul>
+            </div>
+            <div class="mini-card">
+              <div class="mini-card-header">
+                <h3>Your lent books</h3>
+                <p>Active loans tied to your account.</p>
+              </div>
+              <ul class="item-list" id="loaned-list"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal fade" id="bike-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content br-modal">
+        <div class="modal-header">
+          <h5 class="modal-title" id="bike-modal-title">Bike details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="stack">
+            <p class="modal-subhead" id="bike-modal-subhead">Details</p>
+            <div class="detail-grid" id="bike-modal-details"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" type="button" id="bike-rent-action">Rent bike</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="book-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content br-modal">
+        <div class="modal-header">
+          <h5 class="modal-title" id="book-modal-title">Book details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="stack">
+            <p class="modal-subhead" id="book-modal-subhead">Details</p>
+            <div class="detail-grid" id="book-modal-details"></div>
+            <p class="subhead">Upfront fee applies. Late return fines may apply.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" type="button" id="book-loan-action">Lend book</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./vendor/bootstrap/bootstrap.bundle.min.js"></script>
+</body>
+</html>

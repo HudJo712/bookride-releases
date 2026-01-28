@@ -9,7 +9,6 @@ API_KEYS: Dict[str, str] = {
     "admin-key-456": "admin",
 }
 
-
 def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
     user = API_KEYS.get(x_api_key)
     if user is None:

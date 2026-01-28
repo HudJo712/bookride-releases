@@ -65,3 +65,26 @@ class RentalStopRequest(BaseModel):
 class RentalStopResponse(BaseModel):
     duration_min: int
     price_eur: float
+
+
+class BookLoanStartRequest(BaseModel):
+    book_id: int = Field(gt=0)
+
+
+class BookLoanStartResponse(BaseModel):
+    loan_id: int
+    started_at: datetime
+    due_at: datetime
+    balance_due: float
+
+
+class BookLoanStopRequest(BaseModel):
+    loan_id: int = Field(gt=0)
+
+
+class BookLoanStopResponse(BaseModel):
+    duration_days: int
+    returned_at: datetime
+    balance_due: float
+    fine_applied: bool
+    fine_eur: float

@@ -1,0 +1,12 @@
+---
+deploy_user: ubuntu
+deploy_group: ubuntu
+app_root: /opt/bookride
+app_src_root: "{{ playbook_dir }}/../../.."
+app_env_file: .env
+app_copy_items:
+  - docker-compose.yml
+  - backend
+  - docs
+  - frontend
+  - ops

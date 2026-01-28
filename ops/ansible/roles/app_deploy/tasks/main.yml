@@ -1,0 +1,68 @@
+---
+- name: Ensure app root exists
+  ansible.builtin.file:
+    path: "{{ app_root }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: "0755"
+
+- name: Remove nested copy leftovers
+  ansible.builtin.file:
+    path: "{{ app_root }}/{{ item }}"
+    state: absent
+  loop:
+    - backend/backend
+    - frontend/frontend
+    - ops/ops
+
+- name: Remove leftover containers by name
+  ansible.builtin.command: "docker rm -f {{ item }}"
+  loop:
+    - api_blue
+    - api_green
+    - db
+    - elasticsearch
+    - kibana
+    - kibana_setup
+    - elastic-setup
+    - nginx
+    - prometheus
+    - grafana
+    - webhook-listener
+    - jenkins
+  register: remove_containers
+  failed_when: false
+  changed_when: remove_containers.rc == 0
+
+- name: Copy application files for docker compose
+  ansible.builtin.copy:
+    src: "{{ app_src_root }}/{{ item }}"
+    dest: "{{ app_root }}/"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+  loop: "{{ app_copy_items }}"
+
+- name: Check for env file
+  ansible.builtin.stat:
+    path: "{{ app_src_root }}/{{ app_env_file }}"
+  register: app_env_stat
+
+- name: Copy env file if present
+  ansible.builtin.copy:
+    src: "{{ app_src_root }}/{{ app_env_file }}"
+    dest: "{{ app_root }}/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: "0600"
+  when: app_env_stat.stat.exists
+
+- name: Start stack with docker compose
+  ansible.builtin.command: docker compose down
+  args:
+    chdir: "{{ app_root }}"
+
+- name: Start stack with docker compose
+  ansible.builtin.command: docker compose up -d --build
+  args:
+    chdir: "{{ app_root }}"

@@ -1,0 +1,6 @@
+---
+- name: Deploy BookRide stack
+  hosts: all
+  become: true
+  roles:
+    - app_deploy

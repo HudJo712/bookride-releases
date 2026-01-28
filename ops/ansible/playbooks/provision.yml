@@ -1,0 +1,6 @@
+---
+- name: Provision Docker host
+  hosts: all
+  become: true
+  roles:
+    - docker
